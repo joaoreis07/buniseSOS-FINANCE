@@ -1,10 +1,9 @@
-import Image from "next/image";
 import type { ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 
 type BrandProps = {
   light?: boolean;
-  /** Só a marca circular, sem texto */
+  /** Só o monograma, sem texto */
   logoOnly?: boolean;
   className?: string;
 };
@@ -16,23 +15,23 @@ export function Brand({ light = false, logoOnly = false, className = "" }: Brand
         light ? "text-white" : "text-slate-950"
       } ${className}`}
     >
-      <Image
-        src="/logo-clinica-odonto.jpg"
-        alt="Clínica Odonto"
-        width={40}
-        height={40}
-        priority
-        className="size-10 shrink-0 rounded-full object-cover shadow-lg shadow-[0_8px_22px_rgba(8,62,170,0.35)] ring-2 ring-white/20"
-      />
+      <span
+        className={`grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold tracking-tight shadow-lg shadow-blue-600/25 ${
+          light ? "bg-white text-blue-700" : "bg-blue-600 text-white"
+        }`}
+        aria-hidden
+      >
+        B
+      </span>
       {!logoOnly && (
         <span className="min-w-0 leading-tight">
-          <span className="block text-[15px] tracking-[-0.03em]">Clínica Odonto</span>
+          <span className="block text-[15px] tracking-[-0.03em]">BusinessOS</span>
           <span
             className={`block text-[10px] font-medium uppercase tracking-[0.14em] ${
               light ? "text-white/55" : "text-slate-400"
             }`}
           >
-            Gestão
+            Finance
           </span>
         </span>
       )}

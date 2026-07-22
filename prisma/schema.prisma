@@ -1,0 +1,459 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum Plan {
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELED
+}
+
+enum PaymentMethod {
+  PIX
+  CASH
+  CARD
+  TED
+  BOLETO
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum LogLevel {
+  INFO
+  WARNING
+  ERROR
+  DEBUG
+}
+
+enum FeatureKey {
+  agenda
+  reports
+  exports
+  admin
+  crm
+  stripe
+  inventory
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  LOST
+  CONVERTED
+}
+
+enum OpportunityStage {
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  NOTE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+  systemLogs    SystemLog[]
+  notifications Notification[]
+  activities    Activity[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Company {
+  id                 String             @id @default(cuid())
+  name               String
+  logo               String?
+  cnpj               String?
+  phone              String?
+  address            String?
+  city               String?
+  state              String?
+  zipCode            String?
+  plan               Plan               @default(STARTER)
+  subscriptionStatus SubscriptionStatus @default(TRIALING)
+  stripeCustomerId   String?
+  stripeSubscriptionId String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  deletedAt          DateTime?
+
+  memberships    Membership[]
+  settings       CompanySettings?
+  customers      Customer[]
+  categories     Category[]
+  transactions   Transaction[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  systemLogs     SystemLog[]
+  featureFlags   FeatureFlag[]
+  pipelines      Pipeline[]
+  leads          Lead[]
+  opportunities  Opportunity[]
+  activities     Activity[]
+
+  @@index([deletedAt])
+  @@index([cnpj])
+}
+
+model Membership {
+  id        String    @id @default(cuid())
+  userId    String
+  companyId String
+  role      Role      @default(EMPLOYEE)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId, deletedAt])
+  @@index([userId, deletedAt])
+}
+
+model CompanySettings {
+  id            String   @id @default(cuid())
+  companyId     String   @unique
+  theme         String   @default("light")
+  language      String   @default("pt-BR")
+  currency      String   @default("BRL")
+  timezone      String   @default("America/Sao_Paulo")
+  dateFormat    String   @default("dd/MM/yyyy")
+  notifications Boolean  @default(true)
+  monthlyGoal   Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Customer {
+  id        String         @id @default(cuid())
+  companyId String
+  name      String
+  email     String?
+  phone     String?
+  document  String?
+  address   String?
+  city      String?
+  state     String?
+  notes     String?        @db.Text
+  status    CustomerStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  leads        Lead[]
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, name])
+  @@index([companyId, email])
+  @@index([companyId, document])
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  companyId String
+  name      String
+  type      CategoryType
+  icon      String?
+  color     String?
+  parentId  String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryTree")
+  transactions Transaction[]
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, type, deletedAt])
+  @@index([parentId])
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  companyId     String
+  type          TransactionType
+  status        TransactionStatus @default(PENDING)
+  paymentMethod PaymentMethod?
+  amount        Decimal           @db.Decimal(14, 2)
+  description   String?
+  notes         String?           @db.Text
+  date          DateTime
+  dueDate       DateTime?
+  paidAt        DateTime?
+  categoryId    String?
+  customerId    String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, type, deletedAt])
+  @@index([companyId, status, deletedAt])
+  @@index([companyId, date])
+  @@index([categoryId])
+  @@index([customerId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  companyId String
+  userId    String?
+  title     String
+  message   String
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, userId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  companyId String?
+  userId    String?
+  module    String
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([userId, createdAt])
+  @@index([module, action])
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  companyId String?
+  userId    String?
+  level     LogLevel @default(INFO)
+  module    String
+  message   String
+  ip        String?
+  browser   String?
+  createdAt DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([level, createdAt])
+  @@index([module, createdAt])
+}
+
+model FeatureFlag {
+  id        String     @id @default(cuid())
+  companyId String
+  feature   FeatureKey
+  enabled   Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, feature])
+  @@index([companyId])
+}
+
+model Pipeline {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@index([companyId, deletedAt])
+}
+
+model Lead {
+  id         String     @id @default(cuid())
+  companyId  String
+  customerId String?
+  name       String
+  email      String?
+  phone      String?
+  status     LeadStatus @default(NEW)
+  source     String?
+  notes      String?    @db.Text
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  opportunities Opportunity[]
+  activities    Activity[]
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, status])
+}
+
+model Opportunity {
+  id         String           @id @default(cuid())
+  companyId  String
+  pipelineId String?
+  leadId     String?
+  title      String
+  amount     Decimal?         @db.Decimal(14, 2)
+  stage      OpportunityStage @default(QUALIFICATION)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  deletedAt  DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pipeline Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, deletedAt])
+  @@index([pipelineId])
+  @@index([leadId])
+}
+
+model Activity {
+  id         String       @id @default(cuid())
+  companyId  String
+  leadId     String?
+  userId     String?
+  type       ActivityType
+  title      String
+  notes      String?      @db.Text
+  dueAt      DateTime?
+  completedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  deletedAt  DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lead    Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, deletedAt])
+  @@index([leadId])
+  @@index([userId])
+}

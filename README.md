@@ -1,27 +1,33 @@
 # BusinessOS Finance
 
-SaaS financeiro multi-empresa (MVP em construção).
+SaaS multi-tenant de gestão financeira (MVP produção).
 
-## Stack (Etapa 1)
+## Stack
 
-- Next.js 15 (App Router)
-- React 19 + TypeScript
+- Next.js 15 (App Router) + React 19 + TypeScript
 - Tailwind CSS 4 + shadcn/ui
-- Docker Compose (PostgreSQL 16)
+- Prisma 6 + PostgreSQL 16 (Docker Compose)
+- Auth.js (Credentials + JWT)
+- Zod + React Hook Form + TanStack Query/Table
+- Recharts + Sonner + Motion
 
 ## Setup
 
-> **Nota:** este projeto usa `.npmrc` com `ignore-workspace=true` para não herdar um `pnpm-workspace.yaml` que possa existir na pasta pai.
+> Este projeto usa `.npmrc` com `ignore-workspace=true` para não herdar um `pnpm-workspace.yaml` da pasta pai.
 
 ```bash
-# Dependências (use pnpm; se não estiver no PATH: npx pnpm install)
+# Dependências (se pnpm não estiver no PATH: npx pnpm@9.15.9 install)
 pnpm install
 
 # Variáveis de ambiente
 cp .env.example .env
 
-# PostgreSQL (requer Docker Desktop instalado e em execução)
+# PostgreSQL (Docker Desktop aberto)
 pnpm db:up
+
+# Schema + dados demo
+pnpm db:migrate
+pnpm db:seed
 
 # Desenvolvimento
 pnpm dev
@@ -29,26 +35,50 @@ pnpm dev
 
 Abra [http://localhost:3000](http://localhost:3000).
 
-- Landing: `/`
-- Dashboard (UI estática nesta etapa): `/app`
+### Contas demo (seed)
 
-### Docker
+| Email | Senha | Role |
+|---|---|---|
+| `admin@businessos.demo` | `Demo@123456` | ADMIN |
+| `gerente@businessos.demo` | `Demo@123456` | MANAGER |
+| `funcionario@businessos.demo` | `Demo@123456` | EMPLOYEE |
 
-O arquivo `docker-compose.yml` sobe PostgreSQL 16 com healthcheck. Nesta etapa o banco **ainda não é usado pela aplicação** — só a infraestrutura fica pronta para a Etapa 2.
+Segunda empresa para isolamento: `admin@outra.demo` / `Demo@123456`.
 
-**Pré-requisitos no Windows:**
+### Rotas principais
+
+| Rota | Descrição |
+|---|---|
+| `/` | Landing |
+| `/login` `/register` | Autenticação |
+| `/forgot-password` `/reset-password` `/verify-email` | Recuperação / verificação |
+| `/change-password` | Alterar senha (autenticado) |
+| `/app` | Dashboard (KPIs reais) |
+| `/app/customers` | Clientes + histórico financeiro |
+| `/app/finance` | Receitas, despesas, categorias e fluxo |
+| `/app/settings` | Empresa, preferências, notificações e auditoria |
+
+Em desenvolvimento, e-mails são impressos no console do servidor (fallback sem Resend).
+
+## Docker
+
+`docker-compose.yml` sobe PostgreSQL 16 com healthcheck.
+
+**Windows:**
 
 1. Docker Desktop instalado
-2. WSL 2 instalado (`wsl --install` no PowerShell como Administrador, depois reiniciar)
-3. Docker Desktop aberto e engine Linux em execução
+2. WSL 2 (`wsl --install`, reiniciar)
+3. Docker Desktop aberto (engine Linux)
 
 ```bash
-pnpm db:up      # docker compose up -d
-pnpm db:logs    # logs do Postgres
-pnpm db:down    # para o container
+pnpm db:up
+pnpm db:logs
+pnpm db:down
+pnpm db:migrate
+pnpm db:seed
 ```
 
-Credenciais padrão (ver `.env.example`):
+Credenciais padrão (`.env.example`):
 
 - User/Password: `businessos` / `businessos`
 - Database: `businessos_finance`
@@ -58,20 +88,47 @@ Credenciais padrão (ver `.env.example`):
 
 | Script | Descrição |
 |---|---|
-| `pnpm dev` | Servidor de desenvolvimento |
-| `pnpm build` | Build de produção |
-| `pnpm start` | Servidor de produção |
-| `pnpm lint` | ESLint |
-| `pnpm typecheck` | TypeScript (`tsc --noEmit`) |
-| `pnpm db:up` | Sobe Postgres via Docker |
-| `pnpm db:down` | Para o container |
+| `pnpm dev` | Desenvolvimento |
+| `pnpm build` / `pnpm start` | Produção |
+| `pnpm lint` / `pnpm typecheck` | Qualidade |
+| `pnpm db:up` / `db:down` / `db:logs` | Docker Postgres |
+| `pnpm db:migrate` / `db:seed` / `db:studio` | Prisma |
+| `pnpm db:verify` | Isolamento tenant + soft delete |
+| `pnpm db:verify:rbac` | Matriz de permissões |
+| `pnpm db:verify:dashboard` | KPIs do seed |
+| `pnpm db:verify:customers` | CRUD clientes |
+| `pnpm db:verify:finance` | CRUD financeiro + audit |
+| `pnpm db:verify:settings` | Settings + logs |
+| `pnpm smoke:e2e` | Fluxo register → KPIs → cliente → transação → settings |
+
+## APIs internas
+
+- `GET /api/dashboard`
+- `GET/POST /api/customers` · `GET/PATCH/DELETE /api/customers/[id]`
+- `GET/POST /api/finance` · `GET/PATCH/DELETE /api/finance/[id]` · `GET/POST /api/finance/categories`
+- `GET/PATCH /api/settings`
+
+Todas exigem sessão Auth.js e respeitam RBAC + `companyId`.
 
 ## Estrutura
 
 ```text
 src/
-  app/           # rotas Next.js
-  modules/       # domínios (auth, dashboard, finance, …)
-  shared/        # UI, lib, hooks compartilhados
-prisma/          # reservado (Etapa 2+)
+  app/           # rotas Next.js + APIs
+  modules/       # auth, dashboard, customers, finance, settings, app-shell
+  shared/        # UI, lib (auth, rbac, prisma, storage), repositories
+prisma/          # schema, migrations, seed, verifies, smoke E2E
 ```
+
+## RBAC (resumo)
+
+| | Admin | Gerente | Funcionário |
+|---|---|---|---|
+| Dashboard | ✓ | ✓ | ✓ |
+| Clientes | ✓ | ✓ | ver |
+| Financeiro | ✓ | ✓ | — |
+| Settings | ✓ | ✓ | — |
+
+## Storage
+
+Interface `StorageProvider` em `src/shared/lib/storage` com implementação local (`LocalStorageProvider`) pronta para anexos futuros.

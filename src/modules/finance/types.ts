@@ -1,40 +1,22 @@
-export type PaymentMethod =
-  | "PIX"
-  | "Dinheiro"
-  | "Cartão de Crédito"
-  | "Cartão de Débito"
-  | "Transferência";
+export type PaymentMethod = "PIX" | "CASH" | "CARD" | "TED" | "BOLETO";
 
-export type MovementType = "entrada" | "saida";
+export type MovementType = "INCOME" | "EXPENSE";
 
-export type DateFilter =
-  | "hoje"
-  | "ontem"
-  | "semana"
-  | "mes"
-  | "personalizado";
+export type TransactionStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
 
-export interface FinanceMovement {
-  id: string;
-  type: MovementType;
-  personName: string;
-  description: string;
-  paymentMethod: PaymentMethod;
-  responsible: string;
-  amount: number;
-  date: string; // ISO yyyy-mm-dd
-  time: string; // HH:mm
-  notes?: string;
-}
+export type DateFilter = "hoje" | "ontem" | "semana" | "mes" | "personalizado";
 
-export interface MovementFormData {
-  type: MovementType;
-  personName: string;
-  description: string;
-  amount: string;
-  paymentMethod: PaymentMethod;
-  responsible: string;
-  date: string;
-  time: string;
-  notes: string;
-}
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  PIX: "PIX",
+  CASH: "Dinheiro",
+  CARD: "Cartão",
+  TED: "Transferência",
+  BOLETO: "Boleto",
+};
+
+export const STATUS_LABELS: Record<TransactionStatus, string> = {
+  PAID: "Pago",
+  PENDING: "Pendente",
+  OVERDUE: "Vencido",
+  CANCELED: "Cancelado",
+};

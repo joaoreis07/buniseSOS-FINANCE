@@ -1,8 +1,13 @@
 import { cn } from "@/shared/components/ui/utils";
 import type { PaymentMethod } from "../types";
+import { PAYMENT_METHOD_LABELS } from "../types";
 import { paymentBadgeClass } from "../utils";
 
-export function PaymentBadge({ method }: { method: PaymentMethod }) {
+export function PaymentBadge({ method }: { method: PaymentMethod | null }) {
+  if (!method) {
+    return <span className="text-xs text-slate-400">—</span>;
+  }
+
   return (
     <span
       className={cn(
@@ -10,7 +15,7 @@ export function PaymentBadge({ method }: { method: PaymentMethod }) {
         paymentBadgeClass(method),
       )}
     >
-      {method}
+      {PAYMENT_METHOD_LABELS[method]}
     </span>
   );
 }

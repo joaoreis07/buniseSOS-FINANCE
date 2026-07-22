@@ -1,23 +1,26 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  CalendarDays,
   Check,
   ChevronDown,
   ChevronRight,
-  Clock3,
+  CircleDollarSign,
   FileBarChart2,
   LayoutDashboard,
   Menu,
+  NotebookPen,
   Users,
   Wallet,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { Brand, Pill } from "@/shared/components/brand";
+import { demoLoginAction } from "@/modules/auth/actions/auth.actions";
 
 const revenueData = [
   { month: "Jan", value: 5200, profit: 3500 },
@@ -30,34 +33,34 @@ const revenueData = [
 
 const features = [
   {
-    icon: CalendarDays,
-    title: "Agendamento online",
-    description: "Sua agenda aberta 24h para seus clientes marcarem sozinhos.",
-  },
-  {
     icon: Wallet,
     title: "Controle financeiro",
-    description: "Entenda entradas, saídas e lucro sem depender de planilhas.",
+    description: "Registre entradas e saídas e saiba exatamente quanto entra e quanto sai.",
   },
   {
-    icon: LayoutDashboard,
-    title: "Página profissional",
-    description: "Seu negócio ganha um link próprio, bonito e pronto para converter.",
+    icon: CircleDollarSign,
+    title: "Saldo e fluxo de caixa",
+    description: "Acompanhe o saldo atual, o pendente e o vencido sem abrir planilha.",
   },
   {
     icon: Users,
-    title: "Gestão de clientes",
-    description: "Histórico completo para você criar atendimentos mais pessoais.",
+    title: "Clientes e histórico",
+    description: "Cadastre clientes e veja o histórico financeiro de cada um em um clique.",
   },
   {
-    icon: Clock3,
-    title: "Agenda inteligente",
-    description: "Veja seu dia, semana ou mês com a clareza que sua rotina pede.",
+    icon: NotebookPen,
+    title: "Tudo fora do papel",
+    description: "Troque cadernos e anotações soltas por um registro organizado e pesquisável.",
+  },
+  {
+    icon: LayoutDashboard,
+    title: "Visão clara do mês",
+    description: "KPIs, meta mensal e gráficos para entender o momento do seu caixa.",
   },
   {
     icon: FileBarChart2,
-    title: "Relatórios claros",
-    description: "Indicadores automáticos para tomar decisões com segurança.",
+    title: "Relatórios simples",
+    description: "Indicadores objetivos para decidir com base em números, não em memória.",
   },
 ];
 
@@ -67,15 +70,12 @@ function DashboardPreview() {
       <div className="flex h-[365px] overflow-hidden rounded-[14px] border border-slate-100 bg-slate-50">
         <aside className="hidden w-[116px] shrink-0 bg-slate-950 p-3 text-slate-400 sm:block">
           <div className="mb-8 flex items-center gap-1.5 text-[9px] font-semibold text-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo-clinica-odonto.jpg"
-              alt=""
-              className="size-5 rounded-full object-cover"
-            />
-            Clínica Odonto
+            <span className="grid size-5 place-items-center rounded-md bg-blue-600 text-[8px] font-bold">
+              B
+            </span>
+            BusinessOS
           </div>
-          {["Visão geral", "Agenda", "Clientes", "Financeiro"].map((x, i) => (
+          {["Visão geral", "Clientes", "Financeiro", "Configurações"].map((x, i) => (
             <div
               key={x}
               className={`mb-1 rounded-md px-2 py-1.5 text-[8px] ${i === 0 ? "bg-white/10 text-white" : ""}`}
@@ -96,7 +96,7 @@ function DashboardPreview() {
             {[
               ["Receita", "R$ 10.240"],
               ["Lucro", "R$ 7.168"],
-              ["Clientes", "124"],
+              ["Saldo", "R$ 18.250"],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-slate-100 bg-white p-2.5">
                 <p className="text-[7px] text-slate-400">{label}</p>
@@ -127,22 +127,26 @@ function DashboardPreview() {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-lg border border-slate-100 bg-white p-2.5">
-              <p className="text-[8px] font-medium text-slate-600">Próximos atendimentos</p>
+              <p className="text-[8px] font-medium text-slate-600">Últimas movimentações</p>
               <div className="mt-2 flex items-center gap-2 text-[8px]">
-                <span className="size-5 rounded-full bg-rose-100" />
-                Ana Clara <span className="ml-auto text-slate-400">14:00</span>
+                <span className="size-5 rounded-full bg-emerald-100" />
+                Consulta · Renata{" "}
+                <span className="ml-auto font-semibold text-emerald-600">+R$ 180</span>
               </div>
             </div>
             <div className="rounded-lg border border-slate-100 bg-white p-2.5">
-              <p className="text-[8px] font-medium text-slate-600">Saldo disponível</p>
-              <p className="mt-2 text-[13px] font-semibold">R$ 18.250</p>
+              <p className="text-[8px] font-medium text-slate-600">Meta do mês</p>
+              <p className="mt-2 text-[13px] font-semibold">68%</p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full w-[68%] rounded-full bg-blue-600" />
+              </div>
             </div>
           </div>
         </div>
       </div>
       <div className="absolute -right-5 top-12 hidden rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-xl sm:block">
-        <p className="text-[9px] text-slate-400">Novo agendamento</p>
-        <p className="mt-0.5 text-[10px] font-semibold text-slate-900">Mariana · 15:30</p>
+        <p className="text-[9px] text-slate-400">Nova entrada</p>
+        <p className="mt-0.5 text-[10px] font-semibold text-slate-900">PIX · R$ 250,00</p>
       </div>
     </div>
   );
@@ -151,25 +155,50 @@ function DashboardPreview() {
 function OpenAppLink({
   children,
   className,
+  href = "/register",
 }: {
   children: ReactNode;
   className?: string;
+  href?: string;
 }) {
   return (
-    <Link href="/app" className={className}>
+    <Link href={href} className={className}>
       {children}
     </Link>
   );
 }
 
 export function Landing() {
+  const router = useRouter();
   const [menu, setMenu] = useState(false);
   const [faq, setFaq] = useState<number | null>(null);
+  const [demoPending, startDemo] = useTransition();
   const faqs = [
-    "Preciso informar cartão para testar?",
-    "Posso cancelar quando quiser?",
-    "Meus clientes precisam baixar algum aplicativo?",
+    {
+      q: "Preciso informar cartão para testar?",
+      a: "Não. Você pode explorar a plataforma gratuitamente e decidir com calma se faz sentido para o seu controle financeiro.",
+    },
+    {
+      q: "Serve para quem ainda anota no papel?",
+      a: "Sim. O foco é tirar o financeiro do caderno e da memória: lançamentos, clientes, saldo e histórico em um só lugar.",
+    },
+    {
+      q: "Posso cancelar quando quiser?",
+      a: "Sim. Não há fidelidade neste MVP: você usa enquanto fizer sentido para a sua rotina.",
+    },
   ];
+
+  const openDemo = () => {
+    startDemo(async () => {
+      const result = await demoLoginAction();
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      router.push("/app/finance");
+      router.refresh();
+    });
+  };
 
   return (
     <div className="overflow-hidden bg-[#f8fafc] text-slate-900">
@@ -181,8 +210,13 @@ export function Landing() {
           <a href="#planos">Planos</a>
         </nav>
         <div className="hidden items-center gap-4 md:flex">
-          <OpenAppLink className="text-sm font-medium text-slate-600">Entrar</OpenAppLink>
-          <OpenAppLink className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5">
+          <OpenAppLink href="/login" className="text-sm font-medium text-slate-600">
+            Entrar
+          </OpenAppLink>
+          <OpenAppLink
+            href="/register"
+            className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5"
+          >
             Começar grátis
           </OpenAppLink>
         </div>
@@ -195,7 +229,10 @@ export function Landing() {
           <div className="grid gap-3 text-sm text-slate-600">
             <a href="#recursos">Recursos</a>
             <a href="#como-funciona">Como funciona</a>
-            <OpenAppLink className="rounded-xl bg-blue-600 py-2 text-center text-white">
+            <OpenAppLink
+              href="/register"
+              className="rounded-xl bg-blue-600 py-2 text-center text-white"
+            >
               Começar grátis
             </OpenAppLink>
           </div>
@@ -205,22 +242,30 @@ export function Landing() {
       <main>
         <section className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 pb-24 pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:pb-36 lg:pt-28">
           <div className="relative z-10">
-            <Pill>Feito para quem atende pessoas</Pill>
+            <Pill>Controle financeiro no dia a dia</Pill>
             <h1 className="mt-6 max-w-xl text-[48px] font-semibold leading-[1.08] tracking-[-0.045em] text-slate-950 sm:text-[64px]">
-              Seu negócio organizado em um único lugar.
+              Tire o financeiro do papel e acompanhe tudo em um só lugar.
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-500">
-              Agendamentos online, controle financeiro, clientes, serviços e muito mais. Menos
-              bagunça na rotina. Mais tempo para fazer seu melhor trabalho.
+              Receitas, despesas, clientes e saldo — com clareza para saber o que entra, o que sai
+              e o que ainda está pendente. Sem planilha confusa. Sem depender da memória.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <OpenAppLink className="group flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition hover:-translate-y-0.5">
+              <OpenAppLink
+                href="/register"
+                className="group flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition hover:-translate-y-0.5"
+              >
                 Começar gratuitamente{" "}
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
               </OpenAppLink>
-              <OpenAppLink className="rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300">
-                Ver demonstração
-              </OpenAppLink>
+              <button
+                type="button"
+                onClick={openDemo}
+                disabled={demoPending}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+              >
+                {demoPending ? "Abrindo demonstração..." : "Ver demonstração"}
+              </button>
             </div>
             <p className="mt-5 flex items-center gap-2 text-xs text-slate-500">
               <Check className="size-4 text-emerald-500" />
@@ -236,21 +281,21 @@ export function Landing() {
         <section className="border-y border-slate-200 bg-white">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-8 px-5 py-7 lg:px-8">
             <p className="max-w-xs text-sm text-slate-500">
-              A rotina fica mais leve quando tudo trabalha junto.
+              Feito para quem quer organizar o caixa, não para vender agendamento online.
             </p>
             <div className="flex flex-wrap items-center gap-x-9 gap-y-3 text-sm font-semibold tracking-[-0.02em] text-slate-400">
-              <span>agenda simples</span>
-              <span>pagamentos em dia</span>
-              <span>clientes felizes</span>
+              <span>entradas e saídas</span>
+              <span>saldo em dia</span>
+              <span>histórico de clientes</span>
             </div>
           </div>
         </section>
 
         <section id="recursos" className="mx-auto max-w-7xl px-5 py-24 lg:px-8">
           <div className="max-w-2xl">
-            <Pill>O essencial, muito bem resolvido</Pill>
+            <Pill>O essencial do seu caixa</Pill>
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-5xl">
-              Uma base sólida para o seu próximo nível.
+              Controle financeiro completo, sem firula.
             </h2>
           </div>
           <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-2 lg:grid-cols-3">
@@ -261,7 +306,10 @@ export function Landing() {
                 </div>
                 <h3 className="mt-7 text-lg font-semibold tracking-[-0.025em]">{title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-                <button className="mt-5 flex items-center gap-1 text-sm font-semibold text-blue-600" type="button">
+                <button
+                  className="mt-5 flex items-center gap-1 text-sm font-semibold text-blue-600"
+                  type="button"
+                >
                   Saiba mais <ChevronRight className="size-4" />
                 </button>
               </div>
@@ -274,11 +322,10 @@ export function Landing() {
             <div>
               <Pill>Comece hoje</Pill>
               <h2 className="mt-6 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-                Simples para começar. Poderoso para crescer.
+                Do papel para o digital, em três passos.
               </h2>
               <p className="mt-5 max-w-sm leading-7 text-slate-400">
-                Em poucos passos, você terá uma operação que funciona mesmo enquanto você está
-                atendendo.
+                Em poucos minutos você já consegue registrar o dia e enxergar o mês com clareza.
               </p>
             </div>
             <div className="grid gap-3">
@@ -286,17 +333,17 @@ export function Landing() {
                 [
                   "01",
                   "Crie sua conta",
-                  "Conte o básico sobre seu negócio e escolha seu endereço personalizado.",
+                  "Cadastre sua empresa e entre no painel com segurança.",
                 ],
                 [
                   "02",
-                  "Configure seus serviços",
-                  "Defina duração, preço e horários em que deseja atender.",
+                  "Cadastre clientes e categorias",
+                  "Organize quem paga, o que entra e o que sai.",
                 ],
                 [
                   "03",
-                  "Compartilhe seu link",
-                  "Envie para seus clientes e receba agendamentos automaticamente.",
+                  "Lance as movimentações",
+                  "Registre receitas e despesas e acompanhe saldo, meta e histórico.",
                 ],
               ].map(([num, title, desc]) => (
                 <div
@@ -318,9 +365,9 @@ export function Landing() {
           <div className="text-center">
             <Pill>Planos transparentes</Pill>
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-              Tudo para você avançar.
+              Comece simples. Evolua quando precisar.
             </h2>
-            <p className="mt-4 text-slate-500">Comece grátis. Mude de plano quando quiser.</p>
+            <p className="mt-4 text-slate-500">Foque no controle do caixa. Sem promessas de agenda.</p>
           </div>
           <div className="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-3">
             {(
@@ -328,19 +375,19 @@ export function Landing() {
                 [
                   "Starter",
                   "R$ 0",
-                  "Para quem está começando",
-                  ["Agenda online", "Até 50 clientes", "Página profissional"],
+                  "Para organizar o básico",
+                  ["Lançamentos financeiros", "Até 50 clientes", "Dashboard com KPIs"],
                 ],
                 [
                   "Professional",
                   "R$ 49",
-                  "Para negócios em crescimento",
-                  ["Clientes ilimitados", "Financeiro completo", "Relatórios avançados"],
+                  "Para quem quer acompanhar de verdade",
+                  ["Clientes ilimitados", "Financeiro completo", "Histórico por cliente"],
                 ],
                 [
                   "Business",
                   "R$ 99",
-                  "Para equipes que querem ir além",
+                  "Para equipes e mais usuários",
                   ["Tudo do Professional", "Múltiplos usuários", "Suporte prioritário"],
                 ],
               ] as const
@@ -367,6 +414,7 @@ export function Landing() {
                   <span className="text-sm font-normal">/mês</span>
                 </p>
                 <OpenAppLink
+                  href="/register"
                   className={`mt-7 block w-full rounded-xl py-3 text-center text-sm font-semibold transition hover:-translate-y-0.5 ${
                     i === 1 ? "bg-white text-blue-700" : "bg-slate-950 text-white"
                   }`}
@@ -398,21 +446,18 @@ export function Landing() {
               <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em]">Dúvidas frequentes</h2>
             </div>
             <div>
-              {faqs.map((q, i) => (
-                <div key={q} className="border-b border-slate-200 py-5">
+              {faqs.map((item, i) => (
+                <div key={item.q} className="border-b border-slate-200 py-5">
                   <button
                     onClick={() => setFaq(faq === i ? null : i)}
                     className="flex w-full items-center justify-between gap-6 text-left font-semibold"
                     type="button"
                   >
-                    <span>{q}</span>
+                    <span>{item.q}</span>
                     <ChevronDown className={`size-5 transition ${faq === i ? "rotate-180" : ""}`} />
                   </button>
                   {faq === i && (
-                    <p className="max-w-xl pt-3 text-sm leading-6 text-slate-500">
-                      Não. Você pode explorar a plataforma gratuitamente e decidir com calma qual
-                      plano faz mais sentido para o momento do seu negócio.
-                    </p>
+                    <p className="max-w-xl pt-3 text-sm leading-6 text-slate-500">{item.a}</p>
                   )}
                 </div>
               ))}
@@ -422,14 +467,17 @@ export function Landing() {
 
         <section className="px-5 pb-20 lg:px-8">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[28px] bg-blue-600 px-7 py-16 text-center text-white sm:px-12">
-            <p className="text-sm font-medium text-blue-100">Seu melhor sistema começa agora</p>
+            <p className="text-sm font-medium text-blue-100">Organize o caixa de verdade</p>
             <h2 className="mx-auto mt-3 max-w-2xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
               Comece gratuitamente hoje mesmo.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-blue-100">
-              Cuide da experiência dos seus clientes. A Clínica Odonto cuida do resto.
+              Menos papel. Mais clareza sobre o dinheiro que entra e sai.
             </p>
-            <OpenAppLink className="mt-8 inline-block rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-blue-700 shadow-lg transition hover:-translate-y-0.5">
+            <OpenAppLink
+              href="/register"
+              className="mt-8 inline-block rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-blue-700 shadow-lg transition hover:-translate-y-0.5"
+            >
               Criar minha conta grátis
             </OpenAppLink>
           </div>
@@ -445,7 +493,7 @@ export function Landing() {
             <a>Política de privacidade</a>
             <a>Termos</a>
           </div>
-          <p>© 2026 Clínica Odonto</p>
+          <p>© 2026 BusinessOS Finance</p>
         </div>
       </footer>
     </div>

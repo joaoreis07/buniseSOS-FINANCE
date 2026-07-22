@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
+import { AppProviders } from "@/shared/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Clínica Odonto — Gestão",
+  title: "BusinessOS Finance",
   description:
-    "Agendamentos online, controle financeiro, clientes e muito mais. Sua clínica organizada em um único lugar.",
-  icons: {
-    icon: "/logo-clinica-odonto.jpg",
-    apple: "/logo-clinica-odonto.jpg",
-  },
+    "Controle financeiro para tirar o caixa do papel: receitas, despesas, clientes, saldo e histórico em um só lugar.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
-      <body className="min-h-screen antialiased">{children}</body>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <body className="min-h-screen antialiased">
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

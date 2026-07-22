@@ -1,13 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
   Plus,
   Search,
+  Tags,
+  Trash2,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -23,10 +29,6 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/shared/components/ui/radio-group";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -34,21 +36,34 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { EmptyState } from "@/shared/components/empty-state";
 import { cn } from "@/shared/components/ui/utils";
-import { PAYMENT_METHODS, TEAM, TODAY, initialMovements } from "../data";
 import type {
-  DateFilter,
-  FinanceMovement,
-  MovementFormData,
-  MovementType,
-  PaymentMethod,
-} from "../types";
+  CategoryClientDTO,
+  FinanceCustomerOption,
+  FinanceOverviewDTO,
+  TransactionClientDTO,
+} from "../dto/finance.dto";
+import {
+  createCategoryAction,
+  createTransactionAction,
+  deleteCategoryAction,
+  deleteTransactionAction,
+} from "../actions/finance.actions";
+import {
+  createCategorySchema,
+  transactionFormSchema,
+  type CreateCategoryInput,
+  type TransactionFormInput,
+} from "../schemas/finance.schemas";
+import type { DateFilter, PaymentMethod, TransactionStatus } from "../types";
+import { PAYMENT_METHOD_LABELS, STATUS_LABELS } from "../types";
 import {
   formatCurrency,
   formatDateBR,
   formatLongDate,
   isInFilterRange,
-  nowTime,
+  toDateInputValue,
 } from "../utils";
 import { PaymentBadge } from "./payment-badge";
 
@@ -60,17 +75,7 @@ const DATE_FILTERS: { id: DateFilter; label: string }[] = [
   { id: "personalizado", label: "Período Personalizado" },
 ];
 
-const emptyForm = (): MovementFormData => ({
-  type: "entrada",
-  personName: "",
-  description: "",
-  amount: "",
-  paymentMethod: "PIX",
-  responsible: "",
-  date: TODAY,
-  time: nowTime(),
-  notes: "",
-});
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function StatCard({
   label,
@@ -113,8 +118,8 @@ function StatCard({
   );
 }
 
-function TypeBadge({ type }: { type: MovementType }) {
-  const isEntry = type === "entrada";
+function TypeBadge({ type }: { type: TransactionClientDTO["type"] }) {
+  const isEntry = type === "INCOME";
   return (
     <span
       className={cn(
@@ -124,152 +129,217 @@ function TypeBadge({ type }: { type: MovementType }) {
           : "border-rose-200 bg-rose-50 text-rose-700",
       )}
     >
-      {isEntry ? (
-        <ArrowDownLeft className="size-3" />
-      ) : (
-        <ArrowUpRight className="size-3" />
-      )}
+      {isEntry ? <ArrowDownLeft className="size-3" /> : <ArrowUpRight className="size-3" />}
       {isEntry ? "Entrada" : "Saída"}
     </span>
   );
 }
 
-export function FinanceDashboard() {
-  const [movements, setMovements] =
-    useState<FinanceMovement[]>(initialMovements);
-  const [filter, setFilter] = useState<DateFilter>("hoje");
+function StatusBadge({ status }: { status: TransactionStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+        status === "PAID" && "bg-emerald-50 text-emerald-700",
+        status === "PENDING" && "bg-amber-50 text-amber-700",
+        status === "OVERDUE" && "bg-rose-50 text-rose-700",
+        status === "CANCELED" && "bg-slate-100 text-slate-500",
+      )}
+    >
+      {STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+export function FinanceDashboard({
+  initialData,
+  customers,
+  canManage,
+}: {
+  initialData: FinanceOverviewDTO;
+  customers: FinanceCustomerOption[];
+  canManage: boolean;
+}) {
+  const router = useRouter();
+  const [transactions, setTransactions] = useState(initialData.transactions);
+  const [categories, setCategories] = useState(initialData.categories);
+  const [cashFlow, setCashFlow] = useState(initialData.cashFlow);
+  const [todayIncome, setTodayIncome] = useState(initialData.todayIncome);
+  const [todayExpense, setTodayExpense] = useState(initialData.todayExpense);
+  const [todayCount, setTodayCount] = useState(initialData.todayCount);
+
+  const [filter, setFilter] = useState<DateFilter>("mes");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"todos" | MovementType>("todos");
-  const [methodFilter, setMethodFilter] = useState<"todos" | PaymentMethod>(
-    "todos",
-  );
-  const [responsibleFilter, setResponsibleFilter] = useState("todos");
+  const [typeFilter, setTypeFilter] = useState<"todos" | "INCOME" | "EXPENSE">("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | TransactionStatus>("todos");
+  const [methodFilter, setMethodFilter] = useState<"todos" | PaymentMethod>("todos");
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<MovementFormData>(emptyForm);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
 
-  const todayMovements = useMemo(
-    () => movements.filter((m) => m.date === TODAY),
-    [movements],
-  );
+  const form = useForm<TransactionFormInput>({
+    resolver: zodResolver(transactionFormSchema),
+    defaultValues: {
+      type: "INCOME",
+      status: "PAID",
+      paymentMethod: "PIX",
+      amount: "",
+      description: "",
+      notes: "",
+      date: TODAY,
+      categoryId: "",
+      customerId: "",
+    },
+  });
 
-  const entradasHoje = useMemo(
-    () =>
-      todayMovements
-        .filter((m) => m.type === "entrada")
-        .reduce((sum, m) => sum + m.amount, 0),
-    [todayMovements],
-  );
-
-  const saidasHoje = useMemo(
-    () =>
-      todayMovements
-        .filter((m) => m.type === "saida")
-        .reduce((sum, m) => sum + m.amount, 0),
-    [todayMovements],
-  );
-
-  const saldoAtual = useMemo(() => {
-    const totalIn = movements
-      .filter((m) => m.type === "entrada")
-      .reduce((sum, m) => sum + m.amount, 0);
-    const totalOut = movements
-      .filter((m) => m.type === "saida")
-      .reduce((sum, m) => sum + m.amount, 0);
-    return totalIn - totalOut;
-  }, [movements]);
+  const categoryForm = useForm<CreateCategoryInput>({
+    resolver: zodResolver(createCategorySchema),
+    defaultValues: { name: "", type: "INCOME" },
+  });
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return movements
-      .filter((m) => isInFilterRange(m.date, filter, customFrom, customTo))
-      .filter((m) => (typeFilter === "todos" ? true : m.type === typeFilter))
-      .filter((m) =>
-        methodFilter === "todos" ? true : m.paymentMethod === methodFilter,
+    return transactions
+      .filter((item) =>
+        isInFilterRange(item.date, filter, customFrom, customTo, TODAY),
       )
-      .filter((m) =>
-        responsibleFilter === "todos"
-          ? true
-          : m.responsible === responsibleFilter,
+      .filter((item) => (typeFilter === "todos" ? true : item.type === typeFilter))
+      .filter((item) => (statusFilter === "todos" ? true : item.status === statusFilter))
+      .filter((item) =>
+        methodFilter === "todos" ? true : item.paymentMethod === methodFilter,
       )
-      .filter((m) => {
+      .filter((item) => {
         if (!q) return true;
         return (
-          m.personName.toLowerCase().includes(q) ||
-          m.description.toLowerCase().includes(q) ||
-          m.responsible.toLowerCase().includes(q) ||
-          m.paymentMethod.toLowerCase().includes(q) ||
-          (m.notes?.toLowerCase().includes(q) ?? false)
+          (item.customerName?.toLowerCase().includes(q) ?? false) ||
+          (item.description?.toLowerCase().includes(q) ?? false) ||
+          (item.categoryName?.toLowerCase().includes(q) ?? false) ||
+          (item.notes?.toLowerCase().includes(q) ?? false)
         );
       })
-      .sort((a, b) => {
-        const da = `${a.date}T${a.time}`;
-        const db = `${b.date}T${b.time}`;
-        return db.localeCompare(da);
-      });
-  }, [
-    movements,
-    filter,
-    customFrom,
-    customTo,
-    typeFilter,
-    methodFilter,
-    responsibleFilter,
-    search,
-  ]);
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [transactions, filter, customFrom, customTo, typeFilter, statusFilter, methodFilter, search]);
 
-  const summaryEntries = useMemo(
-    () => filtered.filter((m) => m.type === "entrada"),
-    [filtered],
-  );
-  const summaryExits = useMemo(
-    () => filtered.filter((m) => m.type === "saida"),
-    [filtered],
-  );
-  const totalEntradas = summaryEntries.reduce((s, m) => s + m.amount, 0);
-  const totalSaidas = summaryExits.reduce((s, m) => s + m.amount, 0);
-  const saldoFiltrado = totalEntradas - totalSaidas;
+  const periodIncome = filtered
+    .filter((item) => item.type === "INCOME" && item.status === "PAID")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const periodExpense = filtered
+    .filter((item) => item.type === "EXPENSE" && item.status === "PAID")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const periodBalance = periodIncome - periodExpense;
   const lastMovement = filtered[0];
 
-  function openModal() {
-    setForm(emptyForm());
-    setModalOpen(true);
-  }
+  const selectedType = form.watch("type");
+  const categoriesForType = categories.filter((item) => item.type === selectedType);
 
-  function saveMovement() {
-    const amount = Number(
-      form.amount.replace(",", ".").replace(/[^\d.]/g, ""),
+  const refreshLocalTotals = (next: TransactionClientDTO[]) => {
+    const todayRows = next.filter((item) => toDateInputValue(item.date) === TODAY);
+    setTodayIncome(
+      todayRows
+        .filter((item) => item.type === "INCOME" && item.status === "PAID")
+        .reduce((sum, item) => sum + item.amount, 0),
     );
-    if (
-      !form.personName.trim() ||
-      !form.description.trim() ||
-      !form.responsible ||
-      !form.date ||
-      !form.time ||
-      !amount ||
-      amount <= 0
-    ) {
-      return;
+    setTodayExpense(
+      todayRows
+        .filter((item) => item.type === "EXPENSE" && item.status === "PAID")
+        .reduce((sum, item) => sum + item.amount, 0),
+    );
+    setTodayCount(todayRows.length);
+
+    let incomePaid = 0;
+    let expensePaid = 0;
+    let pendingIncome = 0;
+    let overdueIncome = 0;
+    for (const item of next) {
+      if (item.type === "INCOME" && item.status === "PAID") incomePaid += item.amount;
+      if (item.type === "EXPENSE" && item.status === "PAID") expensePaid += item.amount;
+      if (item.type === "INCOME" && item.status === "PENDING") pendingIncome += item.amount;
+      if (item.type === "INCOME" && item.status === "OVERDUE") overdueIncome += item.amount;
     }
+    setCashFlow({
+      incomePaid,
+      expensePaid,
+      balance: incomePaid - expensePaid,
+      pendingIncome,
+      overdueIncome,
+      transactionCount: next.length,
+    });
+  };
 
-    const next: FinanceMovement = {
-      id: `m-${Date.now()}`,
-      type: form.type,
-      personName: form.personName.trim(),
-      description: form.description.trim(),
-      paymentMethod: form.paymentMethod,
-      responsible: form.responsible,
-      amount,
-      date: form.date,
-      time: form.time,
-      notes: form.notes.trim() || undefined,
-    };
+  const openModal = () => {
+    form.reset({
+      type: "INCOME",
+      status: "PAID",
+      paymentMethod: "PIX",
+      amount: "",
+      description: "",
+      notes: "",
+      date: TODAY,
+      categoryId: "",
+      customerId: "",
+    });
+    setModalOpen(true);
+  };
 
-    setMovements((prev) => [next, ...prev]);
-    setModalOpen(false);
-    setForm(emptyForm());
-  }
+  const onSubmit = form.handleSubmit((values) => {
+    startTransition(async () => {
+      const result = await createTransactionAction(values);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      const next = [result.data, ...transactions];
+      setTransactions(next);
+      refreshLocalTotals(next);
+      toast.success(result.message ?? "Movimentação criada");
+      setModalOpen(false);
+      router.refresh();
+    });
+  });
+
+  const handleDelete = (id: string) => {
+    startTransition(async () => {
+      const result = await deleteTransactionAction({ id });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      const next = transactions.filter((item) => item.id !== id);
+      setTransactions(next);
+      refreshLocalTotals(next);
+      toast.success("Movimentação removida");
+      router.refresh();
+    });
+  };
+
+  const onCreateCategory = categoryForm.handleSubmit((values) => {
+    startTransition(async () => {
+      const result = await createCategoryAction(values);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setCategories((current) =>
+        [...current, result.data].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      toast.success("Categoria criada");
+      categoryForm.reset({ name: "", type: "INCOME" });
+    });
+  });
+
+  const handleDeleteCategory = (id: string) => {
+    startTransition(async () => {
+      const result = await deleteCategoryAction({ id });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setCategories((current) => current.filter((item) => item.id !== id));
+      toast.success("Categoria removida");
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -279,48 +349,63 @@ export function FinanceDashboard() {
             Financeiro
           </h2>
           <p className="mt-1 text-sm capitalize text-slate-500">
-            {formatLongDate(TODAY)} · Controle de caixa da clínica
+            {formatLongDate(TODAY)} · Controle de caixa
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={openModal}
-          className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
-        >
-          <Plus className="size-4" />
-          Nova Movimentação
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {canManage && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCategoriesOpen(true)}
+              className="rounded-xl"
+            >
+              <Tags className="mr-2 size-4" />
+              Categorias
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              type="button"
+              onClick={openModal}
+              className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+            >
+              <Plus className="size-4" />
+              Nova Movimentação
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Entradas do Dia"
-          value={formatCurrency(entradasHoje)}
-          hint={`${todayMovements.filter((m) => m.type === "entrada").length} recebimentos`}
+          value={formatCurrency(todayIncome)}
+          hint="Receitas pagas hoje"
           icon={ArrowDownLeft}
           accent="bg-emerald-50 text-emerald-600"
           delay={0}
         />
         <StatCard
           label="Saídas do Dia"
-          value={formatCurrency(saidasHoje)}
-          hint={`${todayMovements.filter((m) => m.type === "saida").length} pagamentos`}
+          value={formatCurrency(todayExpense)}
+          hint="Despesas pagas hoje"
           icon={ArrowUpRight}
           accent="bg-rose-50 text-rose-600"
           delay={0.05}
         />
         <StatCard
           label="Saldo Atual"
-          value={formatCurrency(saldoAtual)}
-          hint="Entradas − saídas (período total)"
+          value={formatCurrency(cashFlow.balance)}
+          hint="Receitas pagas − despesas pagas"
           icon={TrendingUp}
           accent="bg-blue-50 text-blue-600"
           delay={0.1}
         />
         <StatCard
           label="Movimentações do Dia"
-          value={String(todayMovements.length)}
-          hint="Registros de hoje"
+          value={String(todayCount)}
+          hint={`${formatCurrency(cashFlow.pendingIncome + cashFlow.overdueIncome)} a receber`}
           icon={CalendarDays}
           accent="bg-amber-50 text-amber-600"
           delay={0.15}
@@ -328,23 +413,23 @@ export function FinanceDashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="space-y-4 min-w-0">
+        <div className="min-w-0 space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-1.5">
-                {DATE_FILTERS.map((f) => (
+                {DATE_FILTERS.map((item) => (
                   <button
-                    key={f.id}
+                    key={item.id}
                     type="button"
-                    onClick={() => setFilter(f.id)}
+                    onClick={() => setFilter(item.id)}
                     className={cn(
                       "rounded-xl px-3.5 py-2 text-xs font-semibold transition",
-                      filter === f.id
+                      filter === item.id
                         ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                         : "bg-slate-50 text-slate-600 hover:bg-slate-100",
                     )}
                   >
-                    {f.label}
+                    {item.label}
                   </button>
                 ))}
               </div>
@@ -372,347 +457,334 @@ export function FinanceDashboard() {
                 </div>
               ) : null}
 
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="relative min-w-0 flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <div className="flex flex-wrap gap-3">
+                <div className="relative min-w-[200px] flex-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar por nome, descrição, responsável…"
-                    className="h-10 rounded-xl pl-9"
+                    placeholder="Buscar descrição, cliente, categoria..."
+                    className="h-10 rounded-xl pl-10"
                   />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Select
-                    value={typeFilter}
-                    onValueChange={(v) =>
-                      setTypeFilter(v as "todos" | MovementType)
-                    }
-                  >
-                    <SelectTrigger className="h-10 w-[140px] rounded-xl">
-                      <SelectValue placeholder="Tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos os tipos</SelectItem>
-                      <SelectItem value="entrada">Entrada</SelectItem>
-                      <SelectItem value="saida">Saída</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={methodFilter}
-                    onValueChange={(v) =>
-                      setMethodFilter(v as "todos" | PaymentMethod)
-                    }
-                  >
-                    <SelectTrigger className="h-10 w-[180px] rounded-xl">
-                      <SelectValue placeholder="Pagamento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todas as formas</SelectItem>
-                      {PAYMENT_METHODS.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={responsibleFilter}
-                    onValueChange={setResponsibleFilter}
-                  >
-                    <SelectTrigger className="h-10 w-[160px] rounded-xl">
-                      <SelectValue placeholder="Responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos</SelectItem>
-                      {TEAM.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select
+                  value={typeFilter}
+                  onValueChange={(value: "todos" | "INCOME" | "EXPENSE") => setTypeFilter(value)}
+                >
+                  <SelectTrigger className="h-10 w-[140px] rounded-xl">
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="INCOME">Entradas</SelectItem>
+                    <SelectItem value="EXPENSE">Saídas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value: "todos" | TransactionStatus) => setStatusFilter(value)}
+                >
+                  <SelectTrigger className="h-10 w-[140px] rounded-xl">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Status</SelectItem>
+                    <SelectItem value="PAID">Pago</SelectItem>
+                    <SelectItem value="PENDING">Pendente</SelectItem>
+                    <SelectItem value="OVERDUE">Vencido</SelectItem>
+                    <SelectItem value="CANCELED">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={methodFilter}
+                  onValueChange={(value: "todos" | PaymentMethod) => setMethodFilter(value)}
+                >
+                  <SelectTrigger className="h-10 w-[150px] rounded-xl">
+                    <SelectValue placeholder="Pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Pagamento</SelectItem>
+                    {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {PAYMENT_METHOD_LABELS[method]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/80">
-                    {[
-                      "Data",
-                      "Horário",
-                      "Tipo",
-                      "Nome",
-                      "Descrição",
-                      "Pagamento",
-                      "Valor",
-                      "Responsável",
-                      "Observação",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
+          {filtered.length === 0 ? (
+            <EmptyState
+              title="Nenhuma movimentação"
+              description="Ajuste os filtros ou registre a primeira movimentação."
+              actionLabel={canManage ? "Nova Movimentação" : undefined}
+              onAction={canManage ? openModal : undefined}
+            />
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                  <thead className="border-b border-slate-100 bg-slate-50 text-[10px] uppercase tracking-wider text-slate-400">
                     <tr>
-                      <td
-                        colSpan={9}
-                        className="px-4 py-16 text-center text-sm text-slate-400"
-                      >
-                        Nenhuma movimentação encontrada para os filtros
-                        selecionados.
-                      </td>
+                      <th className="px-4 py-3 font-medium">Data</th>
+                      <th className="px-4 py-3 font-medium">Tipo</th>
+                      <th className="px-4 py-3 font-medium">Cliente</th>
+                      <th className="px-4 py-3 font-medium">Descrição</th>
+                      <th className="px-4 py-3 font-medium">Pagamento</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 text-right font-medium">Valor</th>
+                      {canManage && <th className="px-4 py-3 font-medium" />}
                     </tr>
-                  ) : (
-                    filtered.map((m) => (
-                      <tr
-                        key={m.id}
-                        className="border-b border-slate-50 transition hover:bg-slate-50/80"
-                      >
-                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
-                          {formatDateBR(m.date)}
+                  </thead>
+                  <tbody>
+                    {filtered.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50/80">
+                        <td className="px-4 py-3 text-slate-600">{formatDateBR(item.date)}</td>
+                        <td className="px-4 py-3">
+                          <TypeBadge type={item.type} />
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-500">
-                          {m.time}
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-900">
+                            {item.customerName ?? "—"}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {item.categoryName ?? "Sem categoria"}
+                          </p>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <TypeBadge type={m.type} />
+                        <td className="px-4 py-3 text-slate-700">
+                          {item.description ?? "—"}
+                          {item.notes ? (
+                            <p className="mt-0.5 text-xs text-slate-400">{item.notes}</p>
+                          ) : null}
                         </td>
-                        <td className="px-4 py-3.5 font-medium text-slate-900">
-                          {m.personName}
+                        <td className="px-4 py-3">
+                          <PaymentBadge method={item.paymentMethod} />
                         </td>
-                        <td className="max-w-[180px] truncate px-4 py-3.5 text-slate-600">
-                          {m.description}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <PaymentBadge method={m.paymentMethod} />
+                        <td className="px-4 py-3">
+                          <StatusBadge status={item.status} />
                         </td>
                         <td
                           className={cn(
-                            "whitespace-nowrap px-4 py-3.5 font-semibold tabular-nums",
-                            m.type === "entrada"
-                              ? "text-emerald-600"
-                              : "text-rose-600",
+                            "px-4 py-3 text-right font-semibold",
+                            item.type === "EXPENSE" ? "text-rose-600" : "text-emerald-600",
                           )}
                         >
-                          {m.type === "entrada" ? "+" : "−"}
-                          {formatCurrency(m.amount)}
+                          {item.type === "EXPENSE" ? "-" : "+"}
+                          {item.formattedAmount}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
-                          {m.responsible}
-                        </td>
-                        <td className="max-w-[140px] truncate px-4 py-3.5 text-slate-400">
-                          {m.notes || "—"}
-                        </td>
+                        {canManage && (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                              onClick={() => handleDelete(item.id)}
+                              disabled={pending}
+                              aria-label="Remover"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <motion.aside
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.2 }}
-          className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-6"
-        >
-          <div className="flex items-center gap-2">
-            <span className="grid size-9 place-items-center rounded-xl bg-blue-50 text-blue-600">
-              <Wallet className="size-4" />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Resumo</h3>
-              <p className="text-xs text-slate-400">Período filtrado</p>
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="font-semibold tracking-[-0.02em]">Resumo do período</h3>
+            <div className="mt-4 grid gap-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Entradas</span>
+                <span className="font-semibold text-emerald-600">
+                  {formatCurrency(periodIncome)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Saídas</span>
+                <span className="font-semibold text-rose-600">
+                  {formatCurrency(periodExpense)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                <span className="text-slate-500">Saldo</span>
+                <span className="font-semibold">{formatCurrency(periodBalance)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Registros</span>
+                <span className="font-semibold">{filtered.length}</span>
+              </div>
             </div>
+            {lastMovement ? (
+              <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                Última: {lastMovement.description ?? "Movimentação"} ·{" "}
+                {formatDateBR(lastMovement.date)}
+              </div>
+            ) : null}
           </div>
 
-          <div className="mt-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Entradas</span>
-              <span className="text-sm font-semibold text-slate-900">
-                {summaryEntries.length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Total de Entradas</span>
-              <span className="text-sm font-semibold text-emerald-600">
-                {formatCurrency(totalEntradas)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">Total de Saídas</span>
-              <span className="text-sm font-semibold text-rose-600">
-                {formatCurrency(totalSaidas)}
-              </span>
-            </div>
-            <div className="border-t border-slate-100 pt-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700">
-                  Saldo Atual
-                </span>
-                <span
-                  className={cn(
-                    "text-base font-semibold tracking-[-0.02em]",
-                    saldoFiltrado >= 0 ? "text-blue-600" : "text-rose-600",
-                  )}
-                >
-                  {formatCurrency(saldoFiltrado)}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="font-semibold tracking-[-0.02em]">Fluxo geral</h3>
+            <div className="mt-4 grid gap-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Recebido</span>
+                <span className="font-medium">{formatCurrency(cashFlow.incomePaid)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Pago</span>
+                <span className="font-medium">{formatCurrency(cashFlow.expensePaid)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Pendente</span>
+                <span className="font-medium">{formatCurrency(cashFlow.pendingIncome)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Vencido</span>
+                <span className="font-medium text-rose-600">
+                  {formatCurrency(cashFlow.overdueIncome)}
                 </span>
               </div>
             </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Última movimentação
-              </p>
-              {lastMovement ? (
-                <div className="mt-2 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <TypeBadge type={lastMovement.type} />
-                    <span
-                      className={cn(
-                        "text-xs font-semibold",
-                        lastMovement.type === "entrada"
-                          ? "text-emerald-600"
-                          : "text-rose-600",
-                      )}
-                    >
-                      {formatCurrency(lastMovement.amount)}
-                    </span>
-                  </div>
-                  <p className="truncate text-sm font-medium text-slate-800">
-                    {lastMovement.personName}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {formatDateBR(lastMovement.date)} · {lastMovement.time}
-                  </p>
-                </div>
-              ) : (
-                <p className="mt-2 text-sm text-slate-400">Sem registros</p>
-              )}
-            </div>
           </div>
-        </motion.aside>
+        </aside>
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Nova Movimentação</DialogTitle>
             <DialogDescription>
-              Registre uma entrada ou saída no caixa da clínica.
+              Registre uma receita ou despesa com status e categoria.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="grid gap-4 py-1">
-            <div className="grid gap-2">
-              <Label>Tipo</Label>
-              <RadioGroup
-                value={form.type}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, type: v as MovementType }))
-                }
-                className="grid grid-cols-2 gap-2"
-              >
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm font-medium transition",
-                    form.type === "entrada"
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  <RadioGroupItem value="entrada" id="tipo-entrada" />
-                  Entrada
-                </label>
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 text-sm font-medium transition",
-                    form.type === "saida"
-                      ? "border-rose-300 bg-rose-50 text-rose-800"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  <RadioGroupItem value="saida" id="tipo-saida" />
-                  Saída
-                </label>
-              </RadioGroup>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="personName">Nome da pessoa</Label>
-              <Input
-                id="personName"
-                value={form.personName}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, personName: e.target.value }))
-                }
-                placeholder={
-                  form.type === "entrada"
-                    ? "Paciente ou pagador"
-                    : "Fornecedor ou beneficiário"
-                }
-                className="rounded-xl"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="description">Descrição</Label>
-              <Input
-                id="description"
-                value={form.description}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, description: e.target.value }))
-                }
-                placeholder="Ex.: Consulta, materiais, conta…"
-                className="rounded-xl"
-              />
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
+          <form onSubmit={onSubmit} className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="amount">Valor</Label>
-                <Input
-                  id="amount"
-                  inputMode="decimal"
-                  value={form.amount}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, amount: e.target.value }))
-                  }
-                  placeholder="0,00"
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Forma de pagamento</Label>
+                <Label>Tipo</Label>
                 <Select
-                  value={form.paymentMethod}
-                  onValueChange={(v) =>
-                    setForm((f) => ({
-                      ...f,
-                      paymentMethod: v as PaymentMethod,
-                    }))
-                  }
+                  value={form.watch("type")}
+                  onValueChange={(value: "INCOME" | "EXPENSE") => {
+                    form.setValue("type", value);
+                    form.setValue("categoryId", "");
+                  }}
                 >
-                  <SelectTrigger className="rounded-xl">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_METHODS.map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {m}
+                    <SelectItem value="INCOME">Entrada</SelectItem>
+                    <SelectItem value="EXPENSE">Saída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <Select
+                  value={form.watch("status")}
+                  onValueChange={(value: TransactionStatus) => form.setValue("status", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PAID">Pago</SelectItem>
+                    <SelectItem value="PENDING">Pendente</SelectItem>
+                    <SelectItem value="OVERDUE">Vencido</SelectItem>
+                    <SelectItem value="CANCELED">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Valor *</Label>
+              <Input id="amount" placeholder="0,00" {...form.register("amount")} />
+              {form.formState.errors.amount && (
+                <p className="text-xs text-red-600">{form.formState.errors.amount.message}</p>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="description">Descrição *</Label>
+              <Input id="description" {...form.register("description")} />
+              {form.formState.errors.description && (
+                <p className="text-xs text-red-600">
+                  {form.formState.errors.description.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Data</Label>
+                <Input type="date" {...form.register("date")} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Pagamento</Label>
+                <Select
+                  value={form.watch("paymentMethod") || "PIX"}
+                  onValueChange={(value: PaymentMethod) =>
+                    form.setValue("paymentMethod", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {PAYMENT_METHOD_LABELS[method]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Categoria</Label>
+                <Select
+                  value={form.watch("categoryId") || "__none__"}
+                  onValueChange={(value) =>
+                    form.setValue("categoryId", value === "__none__" ? "" : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem categoria</SelectItem>
+                    {categoriesForType.map((category: CategoryClientDTO) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Cliente</Label>
+                <Select
+                  value={form.watch("customerId") || "__none__"}
+                  onValueChange={(value) =>
+                    form.setValue("customerId", value === "__none__" ? "" : value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sem cliente</SelectItem>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -721,84 +793,87 @@ export function FinanceDashboard() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Responsável</Label>
+              <Label htmlFor="notes">Observações</Label>
+              <Textarea id="notes" rows={2} {...form.register("notes")} />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={pending}
+                className="rounded-xl bg-blue-600 hover:bg-blue-700"
+              >
+                {pending ? "Salvando..." : "Salvar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Categorias</DialogTitle>
+            <DialogDescription>
+              Organize receitas e despesas por categoria.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onCreateCategory} className="grid gap-3">
+            <div className="grid gap-2">
+              <Label>Nome</Label>
+              <Input {...categoryForm.register("name")} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Tipo</Label>
               <Select
-                value={form.responsible || undefined}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, responsible: v }))
+                value={categoryForm.watch("type")}
+                onValueChange={(value: "INCOME" | "EXPENSE") =>
+                  categoryForm.setValue("type", value)
                 }
               >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Quem registrou" />
+                <SelectTrigger>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TEAM.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="INCOME">Receita</SelectItem>
+                  <SelectItem value="EXPENSE">Despesa</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="date">Data</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={form.date}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, date: e.target.value }))
-                  }
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="time">Horário</Label>
-                <Input
-                  id="time"
-                  type="time"
-                  value={form.time}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, time: e.target.value }))
-                  }
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Observações</Label>
-              <Textarea
-                id="notes"
-                value={form.notes}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, notes: e.target.value }))
-                }
-                placeholder="Opcional"
-                className="min-h-[80px] rounded-xl"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-2">
             <Button
-              type="button"
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => setModalOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
+              type="submit"
+              disabled={pending}
               className="rounded-xl bg-blue-600 hover:bg-blue-700"
-              onClick={saveMovement}
             >
-              Salvar
+              Adicionar categoria
             </Button>
-          </DialogFooter>
+          </form>
+          <div className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+            {categories.map((category) => (
+              <div
+                key={category.id}
+                className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{category.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {category.type === "INCOME" ? "Receita" : "Despesa"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                  onClick={() => handleDeleteCategory(category.id)}
+                  disabled={pending}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

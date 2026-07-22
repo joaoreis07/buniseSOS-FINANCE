@@ -1,7 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Clínica Odonto — cores extraídas da logo */
+  /* Brand tokens — BusinessOS Finance */
   --brand: #083eaa;
   --brand-foreground: #ffffff;
   --brand-50: #eef3fb;
@@ -129,7 +129,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Brand tokens (logo Clínica Odonto) */
+  /* Brand tokens — BusinessOS Finance */
   --color-brand: var(--brand);
   --color-brand-50: var(--brand-50);
   --color-brand-100: var(--brand-100);
