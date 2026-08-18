@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +13,6 @@ import { loginAction } from "../actions/auth.actions";
 import { loginSchema, type LoginInput } from "../schemas/auth.schemas";
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/app";
   const [error, setError] = useState<string | null>(null);
@@ -27,40 +26,47 @@ export function LoginForm() {
   const onSubmit = form.handleSubmit((values) => {
     setError(null);
     startTransition(async () => {
-      const result = await loginAction(values);
-      if (!result.success) {
+      const result = await loginAction(values, callbackUrl);
+      if (result && !result.success) {
         setError(result.error);
-        return;
       }
-      router.push(callbackUrl);
-      router.refresh();
     });
   });
 
   return (
     <AuthShell
-      title="Entrar na sua conta"
-      subtitle="Acesse o painel do BusinessOS Finance."
+      title="Olá! Bem-vindo de volta"
+      subtitle="Digite seu e-mail e senha para abrir o painel."
       footer={
         <>
-          Não tem conta?{" "}
-          <Link href="/register" className="font-semibold text-blue-600">
-            Criar conta
+          Ainda não tem conta?{" "}
+          <Link href="/criar-conta" className="font-semibold text-blue-600">
+            Criar conta grátis
           </Link>
         </>
       }
     >
       <form onSubmit={onSubmit} className="grid gap-4">
+        <p className="rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5 text-sm text-slate-600">
+          Use o mesmo e-mail com que você se cadastrou. Se esquecer a senha, clique em{" "}
+          <span className="font-semibold">Esqueci minha senha</span>.
+        </p>
         <div className="grid gap-2">
-          <Label htmlFor="email">E-mail</Label>
-          <Input id="email" type="email" autoComplete="email" {...form.register("email")} />
+          <Label htmlFor="email">Seu e-mail</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="ex: maria@email.com"
+            {...form.register("email")}
+          />
           {form.formState.errors.email && (
             <p className="text-xs text-red-600">{form.formState.errors.email.message}</p>
           )}
         </div>
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Senha</Label>
+            <Label htmlFor="password">Sua senha</Label>
             <Link href="/forgot-password" className="text-xs font-medium text-blue-600">
               Esqueci minha senha
             </Link>
@@ -69,6 +75,7 @@ export function LoginForm() {
             id="password"
             type="password"
             autoComplete="current-password"
+            placeholder="Digite sua senha"
             {...form.register("password")}
           />
           {form.formState.errors.password && (
@@ -76,8 +83,8 @@ export function LoginForm() {
           )}
         </div>
         {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <Button type="submit" disabled={pending} className="h-11 rounded-xl bg-blue-600 hover:bg-blue-700">
-          {pending ? "Entrando..." : "Entrar"}
+        <Button type="submit" disabled={pending} className="h-12 rounded-xl bg-blue-600 text-base hover:bg-blue-700">
+          {pending ? "Abrindo o painel..." : "Entrar no painel"}
         </Button>
       </form>
     </AuthShell>

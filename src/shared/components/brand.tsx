@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 import { Sparkles } from "lucide-react";
 
 type BrandProps = {
@@ -6,23 +7,30 @@ type BrandProps = {
   /** Só o monograma, sem texto */
   logoOnly?: boolean;
   className?: string;
+  /** Tamanho do ícone em px (default 40) */
+  size?: number;
 };
 
-export function Brand({ light = false, logoOnly = false, className = "" }: BrandProps) {
+export function Brand({
+  light = false,
+  logoOnly = false,
+  className = "",
+  size = 40,
+}: BrandProps) {
   return (
     <div
       className={`flex items-center gap-2.5 font-semibold tracking-[-0.04em] ${
         light ? "text-white" : "text-slate-950"
       } ${className}`}
     >
-      <span
-        className={`grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold tracking-tight shadow-lg shadow-blue-600/25 ${
-          light ? "bg-white text-blue-700" : "bg-blue-600 text-white"
-        }`}
-        aria-hidden
-      >
-        B
-      </span>
+      <Image
+        src="/brand/logo.png"
+        alt="SB — BusinessOS Finance"
+        width={size}
+        height={size}
+        className="shrink-0 rounded-xl shadow-lg shadow-black/25"
+        priority
+      />
       {!logoOnly && (
         <span className="min-w-0 leading-tight">
           <span className="block text-[15px] tracking-[-0.03em]">BusinessOS</span>

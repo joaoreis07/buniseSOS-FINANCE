@@ -24,6 +24,17 @@ export type ActionResult =
   | { success: true; message?: string }
   | { success: false; error: string };
 
+/** Next.js redirect() / Auth.js signIn(redirectTo) throw this — must not be swallowed. */
+function isNextRedirectError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest: unknown }).digest === "string" &&
+    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
+}
+
 async function clientIp(): Promise<string> {
   const headerStore = await headers();
   return (
@@ -40,20 +51,25 @@ function limitOrThrow(prefix: string, ip: string, limit: number, windowMs: numbe
   }
 }
 
-export async function loginAction(input: unknown): Promise<ActionResult> {
+export async function loginAction(
+  input: unknown,
+  redirectTo = "/app",
+): Promise<ActionResult> {
   try {
     const ip = await clientIp();
     limitOrThrow("login", ip, 10, 15 * 60 * 1000);
 
     const data = loginSchema.parse(input);
+    // Full redirect so Set-Cookie is applied before hitting /app (soft nav drops the session).
     await signIn("credentials", {
       email: data.email,
       password: data.password,
-      redirect: false,
+      redirectTo,
     });
 
     return { success: true, message: "Login realizado com sucesso" };
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     if (error instanceof AuthError) {
       return { success: false, error: "E-mail ou senha inválidos" };
     }
@@ -73,11 +89,12 @@ export async function demoLoginAction(): Promise<ActionResult> {
     await signIn("credentials", {
       email: "admin@businessos.demo",
       password: "Demo@123456",
-      redirect: false,
+      redirectTo: "/app",
     });
 
     return { success: true, message: "Demonstração iniciada" };
   } catch (error) {
+    if (isNextRedirectError(error)) throw error;
     if (error instanceof AuthError) {
       return {
         success: false,
@@ -120,6 +137,20 @@ export async function registerAction(input: unknown): Promise<ActionResult> {
 export async function logoutAction(): Promise<ActionResult> {
   await signOut({ redirect: false });
   return { success: true };
+}
+
+/** Leaves the demo session and opens the real signup form. */
+export async function exitDemoToRegisterAction(): Promise<ActionResult> {
+  try {
+    await signOut({ redirectTo: "/register" });
+    return { success: true };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Não foi possível sair da demonstração",
+    };
+  }
 }
 
 export async function forgotPasswordAction(input: unknown): Promise<ActionResult> {

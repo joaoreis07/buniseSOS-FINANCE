@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import {
   ArrowRight,
   Check,
   ChevronDown,
-  ChevronRight,
   CircleDollarSign,
   FileBarChart2,
   LayoutDashboard,
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { Brand, Pill } from "@/shared/components/brand";
 import { demoLoginAction } from "@/modules/auth/actions/auth.actions";
+import { SignupCtaBalloon } from "./signup-cta-balloon";
 
 const revenueData = [
   { month: "Jan", value: 5200, profit: 3500 },
@@ -66,87 +67,99 @@ const features = [
 
 function DashboardPreview() {
   return (
-    <div className="relative mx-auto w-full max-w-[650px] rounded-[22px] border border-slate-200/90 bg-white p-3 shadow-[0_30px_75px_-28px_rgba(15,23,42,0.35)]">
-      <div className="flex h-[365px] overflow-hidden rounded-[14px] border border-slate-100 bg-slate-50">
-        <aside className="hidden w-[116px] shrink-0 bg-slate-950 p-3 text-slate-400 sm:block">
-          <div className="mb-8 flex items-center gap-1.5 text-[9px] font-semibold text-white">
-            <span className="grid size-5 place-items-center rounded-md bg-blue-600 text-[8px] font-bold">
-              B
-            </span>
-            BusinessOS
-          </div>
-          {["Visão geral", "Clientes", "Financeiro", "Configurações"].map((x, i) => (
-            <div
-              key={x}
-              className={`mb-1 rounded-md px-2 py-1.5 text-[8px] ${i === 0 ? "bg-white/10 text-white" : ""}`}
-            >
-              {x}
+    <div className="relative mx-auto w-full max-w-[650px] pb-28 sm:pb-24">
+      <div className="rounded-[22px] border border-slate-200/90 bg-white p-3 shadow-[0_30px_75px_-28px_rgba(15,23,42,0.35)]">
+        <div className="flex h-[365px] overflow-hidden rounded-[14px] border border-slate-100 bg-slate-50">
+          <aside className="hidden w-[116px] shrink-0 bg-slate-950 p-3 text-slate-400 sm:block">
+            <div className="mb-8 flex items-center gap-1.5 text-[9px] font-semibold text-white">
+              <Image
+                src="/brand/logo.png"
+                alt=""
+                width={20}
+                height={20}
+                className="size-5 shrink-0 rounded-md"
+              />
+              BusinessOS
             </div>
-          ))}
-        </aside>
-        <div className="min-w-0 flex-1 p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-[9px] text-slate-400">Olá, Isabela</p>
-              <p className="text-sm font-semibold tracking-[-0.03em] text-slate-900">Visão geral</p>
-            </div>
-            <div className="size-6 rounded-full bg-amber-100" />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              ["Receita", "R$ 10.240"],
-              ["Lucro", "R$ 7.168"],
-              ["Saldo", "R$ 18.250"],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-100 bg-white p-2.5">
-                <p className="text-[7px] text-slate-400">{label}</p>
-                <p className="mt-1 text-[11px] font-semibold text-slate-900">{value}</p>
-                <p className="mt-1 text-[7px] font-medium text-emerald-600">↑ 12,5%</p>
+            {["Visão geral", "Financeiro", "Agenda", "Clientes"].map((x, i) => (
+              <div
+                key={x}
+                className={`mb-1 rounded-md px-2 py-1.5 text-[8px] ${i === 0 ? "bg-white/10 text-white" : ""}`}
+              >
+                {x}
               </div>
             ))}
-          </div>
-          <div className="mt-3 h-[125px] rounded-lg border border-slate-100 bg-white p-3">
-            <p className="text-[8px] font-medium text-slate-600">Receita mensal</p>
-            <ResponsiveContainer width="100%" height="88%">
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="previewFill" x1="0" x2="0" y1="0" y2="1">
-                    <stop stopColor="#083EAA" stopOpacity=".2" />
-                    <stop offset="1" stopColor="#083EAA" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#083EAA"
-                  strokeWidth={2}
-                  fill="url(#previewFill)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-slate-100 bg-white p-2.5">
-              <p className="text-[8px] font-medium text-slate-600">Últimas movimentações</p>
-              <div className="mt-2 flex items-center gap-2 text-[8px]">
-                <span className="size-5 rounded-full bg-emerald-100" />
-                Consulta · Renata{" "}
-                <span className="ml-auto font-semibold text-emerald-600">+R$ 180</span>
+          </aside>
+          <div className="min-w-0 flex-1 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[9px] text-slate-400">Olá, Isabela</p>
+                <p className="text-sm font-semibold tracking-[-0.03em] text-slate-900">Visão geral</p>
               </div>
+              <div className="size-6 rounded-full bg-amber-100" />
             </div>
-            <div className="rounded-lg border border-slate-100 bg-white p-2.5">
-              <p className="text-[8px] font-medium text-slate-600">Meta do mês</p>
-              <p className="mt-2 text-[13px] font-semibold">68%</p>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full w-[68%] rounded-full bg-blue-600" />
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                ["Receita", "R$ 10.240"],
+                ["Lucro", "R$ 7.168"],
+                ["Saldo", "R$ 18.250"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-slate-100 bg-white p-2.5">
+                  <p className="text-[7px] text-slate-400">{label}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-900">{value}</p>
+                  <p className="mt-1 text-[7px] font-medium text-emerald-600">↑ 12,5%</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 h-[125px] rounded-lg border border-slate-100 bg-white p-3">
+              <p className="text-[8px] font-medium text-slate-600">Como anda a receita</p>
+              <p className="text-[7px] text-slate-400">Linha sobe = entrou mais</p>
+              <ResponsiveContainer width="100%" height="78%">
+                <AreaChart data={revenueData}>
+                  <defs>
+                    <linearGradient id="previewFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop stopColor="#083EAA" stopOpacity=".2" />
+                      <stop offset="1" stopColor="#083EAA" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#083EAA"
+                    strokeWidth={2}
+                    fill="url(#previewFill)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-slate-100 bg-white p-2.5">
+                <p className="text-[8px] font-medium text-slate-600">Últimas movimentações</p>
+                <div className="mt-2 flex items-center gap-2 text-[8px]">
+                  <span className="size-5 rounded-full bg-emerald-100" />
+                  Consulta · Renata{" "}
+                  <span className="ml-auto font-semibold text-emerald-600">+R$ 180</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-white p-2.5">
+                <p className="text-[8px] font-medium text-slate-600">Meta do mês</p>
+                <p className="mt-2 text-[13px] font-semibold">68%</p>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full w-[68%] rounded-full bg-blue-600" />
+                </div>
               </div>
             </div>
           </div>
         </div>
+        <div className="absolute -right-3 top-10 z-10 hidden rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-xl lg:block">
+          <p className="text-[9px] text-slate-400">Nova entrada</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-slate-900">PIX · R$ 250,00</p>
+        </div>
       </div>
-      <div className="absolute -right-5 top-12 hidden rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-xl sm:block">
-        <p className="text-[9px] text-slate-400">Nova entrada</p>
-        <p className="mt-0.5 text-[10px] font-semibold text-slate-900">PIX · R$ 250,00</p>
+
+      {/* Balloon overlapping the mockup — matches the product screenshot */}
+      <div className="absolute bottom-2 left-1/2 z-20 w-[min(100%,300px)] -translate-x-1/2 sm:bottom-4 sm:left-auto sm:right-2 sm:translate-x-0 sm:w-[280px]">
+        <SignupCtaBalloon variant="inline" />
       </div>
     </div>
   );
@@ -155,7 +168,7 @@ function DashboardPreview() {
 function OpenAppLink({
   children,
   className,
-  href = "/register",
+  href = "/criar-conta",
 }: {
   children: ReactNode;
   className?: string;
@@ -168,8 +181,7 @@ function OpenAppLink({
   );
 }
 
-export function Landing() {
-  const router = useRouter();
+export function Landing({ demoEnabled = false }: { demoEnabled?: boolean }) {
   const [menu, setMenu] = useState(false);
   const [faq, setFaq] = useState<number | null>(null);
   const [demoPending, startDemo] = useTransition();
@@ -191,17 +203,15 @@ export function Landing() {
   const openDemo = () => {
     startDemo(async () => {
       const result = await demoLoginAction();
-      if (!result.success) {
+      // Successful sign-in redirects server-side; only handle failures here.
+      if (result && !result.success) {
         toast.error(result.error);
-        return;
       }
-      router.push("/app/finance");
-      router.refresh();
     });
   };
 
   return (
-    <div className="overflow-hidden bg-[#f8fafc] text-slate-900">
+    <div className="bg-[#f8fafc] text-slate-900">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
         <Brand />
         <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
@@ -214,7 +224,7 @@ export function Landing() {
             Entrar
           </OpenAppLink>
           <OpenAppLink
-            href="/register"
+            href="/criar-conta"
             className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-900/15 transition hover:-translate-y-0.5"
           >
             Começar grátis
@@ -230,7 +240,7 @@ export function Landing() {
             <a href="#recursos">Recursos</a>
             <a href="#como-funciona">Como funciona</a>
             <OpenAppLink
-              href="/register"
+              href="/criar-conta"
               className="rounded-xl bg-blue-600 py-2 text-center text-white"
             >
               Começar grátis
@@ -240,7 +250,7 @@ export function Landing() {
       )}
 
       <main>
-        <section className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 pb-24 pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:pb-36 lg:pt-28">
+        <section className="relative mx-auto grid max-w-7xl items-center gap-14 overflow-visible px-5 pb-28 pt-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8 lg:pb-40 lg:pt-28">
           <div className="relative z-10">
             <Pill>Controle financeiro no dia a dia</Pill>
             <h1 className="mt-6 max-w-xl text-[48px] font-semibold leading-[1.08] tracking-[-0.045em] text-slate-950 sm:text-[64px]">
@@ -252,24 +262,26 @@ export function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <OpenAppLink
-                href="/register"
+                href="/criar-conta"
                 className="group flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 transition hover:-translate-y-0.5"
               >
                 Começar gratuitamente{" "}
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
               </OpenAppLink>
-              <button
-                type="button"
-                onClick={openDemo}
-                disabled={demoPending}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
-              >
-                {demoPending ? "Abrindo demonstração..." : "Ver demonstração"}
-              </button>
+              {demoEnabled && (
+                <button
+                  type="button"
+                  onClick={openDemo}
+                  disabled={demoPending}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 disabled:opacity-60"
+                >
+                  {demoPending ? "Abrindo demonstração..." : "Ver demonstração"}
+                </button>
+              )}
             </div>
             <p className="mt-5 flex items-center gap-2 text-xs text-slate-500">
               <Check className="size-4 text-emerald-500" />
-              Sem cartão de crédito · Configuração em minutos
+              Grátis para começar · sem pagar nada agora
             </p>
           </div>
           <div className="relative">
@@ -299,20 +311,26 @@ export function Landing() {
             </h2>
           </div>
           <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-2 lg:grid-cols-3">
-            {features.map(({ icon: Icon, title, description }) => (
-              <div key={title} className="group bg-white p-7 transition hover:bg-blue-50/45">
-                <div className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
+            {features.map(({ icon: Icon, title, description }, index) => (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.35 }}
+                transition={{ duration: 0.4, delay: index * 0.06, ease: "easeOut" }}
+                whileHover={{ y: -4 }}
+                className="group bg-white p-7 transition-colors hover:bg-blue-50/45"
+              >
+                <motion.div
+                  whileHover={{ scale: 1.06 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 22 }}
+                  className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white"
+                >
                   <Icon className="size-5" />
-                </div>
+                </motion.div>
                 <h3 className="mt-7 text-lg font-semibold tracking-[-0.025em]">{title}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-                <button
-                  className="mt-5 flex items-center gap-1 text-sm font-semibold text-blue-600"
-                  type="button"
-                >
-                  Saiba mais <ChevronRight className="size-4" />
-                </button>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
@@ -376,19 +394,19 @@ export function Landing() {
                   "Starter",
                   "R$ 0",
                   "Para organizar o básico",
-                  ["Lançamentos financeiros", "Até 50 clientes", "Dashboard com KPIs"],
+                  ["Até 200 lançamentos", "Clientes ilimitados", "Dashboard com KPIs"],
                 ],
                 [
-                  "Professional",
+                  "Profissional",
                   "R$ 49",
                   "Para quem quer acompanhar de verdade",
-                  ["Clientes ilimitados", "Financeiro completo", "Histórico por cliente"],
+                  ["Lançamentos ilimitados", "Clientes ilimitados", "Histórico por cliente"],
                 ],
                 [
                   "Business",
                   "R$ 99",
                   "Para equipes e mais usuários",
-                  ["Tudo do Professional", "Múltiplos usuários", "Suporte prioritário"],
+                  ["Tudo do Profissional", "Múltiplos usuários", "Suporte prioritário"],
                 ],
               ] as const
             ).map(([name, price, desc, points], i) => (
@@ -414,7 +432,7 @@ export function Landing() {
                   <span className="text-sm font-normal">/mês</span>
                 </p>
                 <OpenAppLink
-                  href="/register"
+                  href="/criar-conta"
                   className={`mt-7 block w-full rounded-xl py-3 text-center text-sm font-semibold transition hover:-translate-y-0.5 ${
                     i === 1 ? "bg-white text-blue-700" : "bg-slate-950 text-white"
                   }`}
@@ -467,31 +485,54 @@ export function Landing() {
 
         <section className="px-5 pb-20 lg:px-8">
           <div className="mx-auto max-w-7xl overflow-hidden rounded-[28px] bg-blue-600 px-7 py-16 text-center text-white sm:px-12">
-            <p className="text-sm font-medium text-blue-100">Organize o caixa de verdade</p>
-            <h2 className="mx-auto mt-3 max-w-2xl text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-              Comece gratuitamente hoje mesmo.
+            <p className="text-sm font-medium text-blue-100">Pronto para organizar o caixa?</p>
+            <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">
+              Crie sua conta grátis e tire o financeiro do papel hoje.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-blue-100">
-              Menos papel. Mais clareza sobre o dinheiro que entra e sai.
+              Cadastre o primeiro cliente, lance a primeira entrada e veja o saldo na hora.
             </p>
             <OpenAppLink
-              href="/register"
-              className="mt-8 inline-block rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-blue-700 shadow-lg transition hover:-translate-y-0.5"
+              href="/criar-conta"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-semibold text-blue-700 shadow-lg transition hover:-translate-y-0.5"
             >
               Criar minha conta grátis
+              <ArrowRight className="size-4" />
             </OpenAppLink>
+            <p className="mt-4 text-xs text-blue-100/90">
+              Grátis para começar · sem pagar nada agora
+            </p>
           </div>
         </section>
       </main>
       <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-7 px-5 py-9 text-sm text-slate-500 md:flex-row lg:px-8">
-          <Brand />
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <a>Instagram</a>
-            <a>WhatsApp</a>
-            <a>Contato</a>
-            <a>Política de privacidade</a>
-            <a>Termos</a>
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-7 px-5 py-9 text-sm text-slate-500 md:flex-row md:items-end lg:px-8">
+          <div>
+            <Brand />
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
+              Dúvidas ou suporte? Fale comigo pelo Instagram ou WhatsApp.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <a
+              href="https://www.instagram.com/reisjoaosv"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-slate-900"
+            >
+              Instagram · @reisjoaosv
+            </a>
+            <a
+              href="https://wa.me/5543988485531"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-slate-900"
+            >
+              WhatsApp · (43) 98848-5531
+            </a>
+            <a href="tel:+5543988485531" className="transition hover:text-slate-900">
+              Telefone · (43) 98848-5531
+            </a>
           </div>
           <p>© 2026 BusinessOS Finance</p>
         </div>
