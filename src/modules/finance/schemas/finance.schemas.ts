@@ -2,7 +2,16 @@ import { z } from "zod";
 
 export const transactionTypeSchema = z.enum(["INCOME", "EXPENSE", "TRANSFER"]);
 export const transactionStatusSchema = z.enum(["PENDING", "PAID", "OVERDUE", "CANCELED"]);
-export const paymentMethodSchema = z.enum(["PIX", "CASH", "CARD", "TED", "BOLETO"]);
+export const paymentMethodSchema = z.enum([
+  "PIX",
+  "CASH",
+  "CARD",
+  "CARD_CREDIT",
+  "CARD_DEBIT",
+  "TED",
+  "BOLETO",
+  "OTHER",
+]);
 export const categoryTypeSchema = z.enum(["INCOME", "EXPENSE"]);
 
 export const transactionFormSchema = z.object({

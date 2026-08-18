@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "PaymentMethod" ADD VALUE 'CARD_CREDIT';
+ALTER TYPE "PaymentMethod" ADD VALUE 'CARD_DEBIT';

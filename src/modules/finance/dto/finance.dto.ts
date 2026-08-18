@@ -23,7 +23,7 @@ export type CategoryResponseDTO = {
 export type CreateTransactionDTO = {
   type: "INCOME" | "EXPENSE" | "TRANSFER";
   status?: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-  paymentMethod?: "PIX" | "CASH" | "CARD" | "TED" | "BOLETO" | null;
+  paymentMethod?: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER" | null;
   amount: number;
   description?: string | null;
   notes?: string | null;
@@ -41,7 +41,7 @@ export type TransactionResponseDTO = {
   companyId: string;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
   status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-  paymentMethod: "PIX" | "CASH" | "CARD" | "TED" | "BOLETO" | null;
+  paymentMethod: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER" | null;
   amount: number;
   description: string | null;
   notes: string | null;
@@ -78,7 +78,7 @@ export type TransactionClientDTO = {
   companyId: string;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
   status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-  paymentMethod: "PIX" | "CASH" | "CARD" | "TED" | "BOLETO" | null;
+  paymentMethod: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER" | null;
   amount: number;
   formattedAmount: string;
   description: string | null;

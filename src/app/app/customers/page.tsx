@@ -1,31 +1,22 @@
-import { CustomersView } from "@/modules/customers/components/customers-view";
-import { listCustomers } from "@/modules/customers/services/customer.service";
+import { CustomersCrmView } from "@/modules/crm/components/customers-crm-view";
+import { listCustomersCrm } from "@/modules/crm/services/crm.service";
+import { listFinanceCategories } from "@/modules/finance/services/finance.service";
 import { hasPermission } from "@/shared/lib/rbac";
 import { requirePermission } from "@/shared/lib/session";
 
-type SearchParams = Promise<{ q?: string }>;
-
-export default async function CustomersPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default async function CustomersPage() {
   const user = await requirePermission("customers:view");
-  const params = await searchParams;
-  const search = params.q?.trim() ?? "";
-
-  const { items, total } = await listCustomers(user.companyId, {
-    search: search || undefined,
-    page: 1,
-    pageSize: 100,
-  });
+  const [items, categories] = await Promise.all([
+    listCustomersCrm(user.companyId),
+    listFinanceCategories(user.companyId, "INCOME").catch(() => []),
+  ]);
 
   return (
-    <CustomersView
+    <CustomersCrmView
       initialItems={items}
-      initialTotal={total}
-      initialSearch={search}
-      canManage={hasPermission(user.role, "customers:manage")}
+      categories={categories.map((item) => ({ id: item.id, name: item.name }))}
+      canManageCustomers={hasPermission(user.role, "customers:manage")}
+      canManageFinance={hasPermission(user.role, "finance:manage")}
     />
   );
 }

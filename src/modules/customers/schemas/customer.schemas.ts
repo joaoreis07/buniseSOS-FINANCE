@@ -12,6 +12,7 @@ export const customerFormSchema = z.object({
       message: "Informe um e-mail válido",
     }),
   phone: z.string().trim(),
+  whatsapp: z.string().trim(),
   document: z.string().trim(),
   address: z.string().trim(),
   city: z.string().trim(),
@@ -24,6 +25,7 @@ export const createCustomerSchema = customerFormSchema.transform((data) => ({
   name: data.name,
   email: data.email.length > 0 ? data.email : null,
   phone: data.phone.length > 0 ? data.phone : null,
+  whatsapp: data.whatsapp.length > 0 ? data.whatsapp : null,
   document: data.document.length > 0 ? data.document : null,
   address: data.address.length > 0 ? data.address : null,
   city: data.city.length > 0 ? data.city : null,
@@ -39,6 +41,9 @@ export const updateCustomerSchema = customerFormSchema.partial().extend({
   if (data.name !== undefined) out.name = data.name;
   if (data.email !== undefined) out.email = data.email.length > 0 ? data.email : null;
   if (data.phone !== undefined) out.phone = data.phone.length > 0 ? data.phone : null;
+  if (data.whatsapp !== undefined) {
+    out.whatsapp = data.whatsapp.length > 0 ? data.whatsapp : null;
+  }
   if (data.document !== undefined) {
     out.document = data.document.length > 0 ? data.document : null;
   }

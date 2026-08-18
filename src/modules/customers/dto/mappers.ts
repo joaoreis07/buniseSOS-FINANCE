@@ -8,6 +8,7 @@ export function toCustomerResponseDTO(customer: PrismaCustomer): CustomerRespons
     name: customer.name,
     email: customer.email,
     phone: customer.phone,
+    whatsapp: customer.whatsapp,
     document: customer.document,
     address: customer.address,
     city: customer.city,

@@ -2,6 +2,7 @@ export type CreateCustomerDTO = {
   name: string;
   email?: string | null;
   phone?: string | null;
+  whatsapp?: string | null;
   document?: string | null;
   address?: string | null;
   city?: string | null;
@@ -18,6 +19,7 @@ export type CustomerResponseDTO = {
   name: string;
   email: string | null;
   phone: string | null;
+  whatsapp: string | null;
   document: string | null;
   address: string | null;
   city: string | null;
@@ -39,7 +41,7 @@ export type CustomerHistoryItemDTO = {
   id: string;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
   status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-  paymentMethod: "PIX" | "CASH" | "CARD" | "TED" | "BOLETO" | null;
+  paymentMethod: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER" | null;
   amount: number;
   formattedAmount: string;
   description: string | null;

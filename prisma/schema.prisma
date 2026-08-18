@@ -50,14 +50,36 @@ enum PaymentMethod {
   PIX
   CASH
   CARD
+  CARD_CREDIT
+  CARD_DEBIT
   TED
   BOLETO
+  OTHER
+}
+
+enum SalePaymentMode {
+  CASH
+  INSTALLMENT
+}
+
+enum InstallmentPeriod {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
 }
 
 enum CustomerStatus {
   ACTIVE
   INACTIVE
   BLOCKED
+}
+
+enum NotificationCategory {
+  FINANCE
+  CUSTOMERS
+  SYSTEM
+  INSTALLMENTS
 }
 
 enum LogLevel {
@@ -182,6 +204,9 @@ model Company {
   customers      Customer[]
   categories     Category[]
   transactions   Transaction[]
+  sales          Sale[]
+  installments   Installment[]
+  installmentPayments InstallmentPayment[]
   notifications  Notification[]
   auditLogs      AuditLog[]
   systemLogs     SystemLog[]
@@ -234,6 +259,7 @@ model Customer {
   name      String
   email     String?
   phone     String?
+  whatsapp  String?
   document  String?
   address   String?
   city      String?
@@ -246,6 +272,7 @@ model Customer {
 
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  sales        Sale[]
   leads        Lead[]
 
   @@index([companyId, deletedAt])
@@ -270,6 +297,7 @@ model Category {
   parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id])
   children     Category[]    @relation("CategoryTree")
   transactions Transaction[]
+  sales        Sale[]
 
   @@index([companyId, deletedAt])
   @@index([companyId, type, deletedAt])
@@ -297,6 +325,8 @@ model Transaction {
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  installment Installment?
+  installmentPayment InstallmentPayment?
 
   @@index([companyId, deletedAt])
   @@index([companyId, type, deletedAt])
@@ -306,14 +336,92 @@ model Transaction {
   @@index([customerId])
 }
 
+model Sale {
+  id                String            @id @default(cuid())
+  companyId         String
+  customerId        String
+  description       String
+  categoryId        String?
+  totalAmount       Decimal           @db.Decimal(14, 2)
+  paymentMethod     PaymentMethod
+  paymentMode       SalePaymentMode
+  installmentsCount Int               @default(1)
+  firstDueDate      DateTime?
+  period            InstallmentPeriod?
+  customPeriodDays  Int?
+  soldAt            DateTime          @default(now())
+  notes             String?           @db.Text
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installments Installment[]
+
+  @@index([companyId, deletedAt])
+  @@index([companyId, customerId, deletedAt])
+  @@index([companyId, soldAt])
+}
+
+model Installment {
+  id              String            @id @default(cuid())
+  companyId       String
+  saleId          String
+  number          Int
+  amount          Decimal           @db.Decimal(14, 2)
+  dueDate         DateTime
+  status          TransactionStatus @default(PENDING)
+  paidAt          DateTime?
+  paymentMethod   PaymentMethod?
+  transactionId   String?           @unique
+  notes           String?           @db.Text
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sale        Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  transaction Transaction?         @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  payments    InstallmentPayment[]
+
+  @@unique([saleId, number])
+  @@index([companyId, deletedAt])
+  @@index([companyId, status, dueDate])
+  @@index([saleId])
+}
+
+model InstallmentPayment {
+  id            String        @id @default(cuid())
+  companyId     String
+  installmentId String
+  amount        Decimal       @db.Decimal(14, 2)
+  paidAt        DateTime
+  paymentMethod PaymentMethod
+  notes         String?       @db.Text
+  transactionId String?       @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  installment Installment  @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, deletedAt])
+  @@index([installmentId])
+}
+
 model Notification {
-  id        String    @id @default(cuid())
+  id        String               @id @default(cuid())
   companyId String
   userId    String?
   title     String
   message   String
-  read      Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  category  NotificationCategory @default(SYSTEM)
+  read      Boolean              @default(false)
+  createdAt DateTime             @default(now())
   deletedAt DateTime?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -321,6 +429,7 @@ model Notification {
 
   @@index([companyId, deletedAt])
   @@index([companyId, userId, read])
+  @@index([companyId, category, deletedAt])
 }
 
 model AuditLog {

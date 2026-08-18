@@ -37,6 +37,7 @@ const emptyValues: CustomerFormInput = {
   name: "",
   email: "",
   phone: "",
+  whatsapp: "",
   document: "",
   address: "",
   city: "",
@@ -71,6 +72,7 @@ export function CustomerFormDialog({
         name: customer.name,
         email: customer.email ?? "",
         phone: customer.phone ?? "",
+        whatsapp: customer.whatsapp ?? "",
         document: customer.document ?? "",
         address: customer.address ?? "",
         city: customer.city ?? "",
@@ -137,27 +139,32 @@ export function CustomerFormDialog({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="customer-document">Documento</Label>
-              <Input id="customer-document" {...form.register("document")} />
+              <Label htmlFor="customer-whatsapp">WhatsApp</Label>
+              <Input id="customer-whatsapp" {...form.register("whatsapp")} />
             </div>
             <div className="grid gap-2">
-              <Label>Status</Label>
-              <Select
-                value={form.watch("status") ?? "ACTIVE"}
-                onValueChange={(value: "ACTIVE" | "INACTIVE" | "BLOCKED") => {
-                  form.setValue("status", value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACTIVE">Ativo</SelectItem>
-                  <SelectItem value="INACTIVE">Inativo</SelectItem>
-                  <SelectItem value="BLOCKED">Bloqueado</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="customer-document">CPF/CNPJ</Label>
+              <Input id="customer-document" {...form.register("document")} />
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Status</Label>
+            <Select
+              value={form.watch("status") ?? "ACTIVE"}
+              onValueChange={(value: "ACTIVE" | "INACTIVE" | "BLOCKED") => {
+                form.setValue("status", value);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Ativo</SelectItem>
+                <SelectItem value="INACTIVE">Inativo</SelectItem>
+                <SelectItem value="BLOCKED">Bloqueado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid gap-2">
