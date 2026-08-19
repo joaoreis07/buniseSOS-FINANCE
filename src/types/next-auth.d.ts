@@ -15,6 +15,7 @@ declare module "next-auth" {
     companyId: string;
     role: Role;
     emailVerified: Date | null;
+    sessionVersion: number;
   }
 }
 
@@ -23,5 +24,7 @@ declare module "next-auth/jwt" {
     companyId?: string;
     role?: Role;
     emailVerified?: Date | null;
+    sessionVersion?: number;
+    invalidated?: boolean;
   }
 }

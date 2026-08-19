@@ -14,6 +14,8 @@ function main() {
   assert(hasPermission("MANAGER", "settings:view"), "MANAGER should access settings");
   assert(!hasPermission("EMPLOYEE", "settings:view"), "EMPLOYEE must not access settings");
   assert(!hasPermission("EMPLOYEE", "finance:view"), "EMPLOYEE must not access finance");
+  assert(!hasPermission("EMPLOYEE", "sales:view"), "EMPLOYEE must not access sales");
+  assert(hasPermission("MANAGER", "sales:view"), "MANAGER can view sales");
   assert(hasPermission("EMPLOYEE", "customers:view"), "EMPLOYEE can view customers");
   assert(hasPermission("MANAGER", "settings:manage"), "MANAGER can manage settings");
   assert(hasPermission("MANAGER", "finance:manage"), "MANAGER can manage finance");

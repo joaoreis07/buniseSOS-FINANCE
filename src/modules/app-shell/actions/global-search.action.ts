@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/shared/lib/prisma";
+import { hasPermission } from "@/shared/lib/rbac";
 import { requireSession } from "@/shared/lib/session";
 
 export type GlobalSearchResult = {
@@ -18,42 +19,51 @@ export async function globalSearchAction(query: string): Promise<GlobalSearchRes
     return [];
   }
 
+  const canViewCustomers = hasPermission(user.role, "customers:view");
+  const canViewFinance = hasPermission(user.role, "finance:view");
+
   const [customers, transactions, categories] = await Promise.all([
-    prisma.customer.findMany({
-      where: {
-        companyId: user.companyId,
-        deletedAt: null,
-        OR: [
-          { name: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-          { document: { contains: q, mode: "insensitive" } },
-          { phone: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      take: 5,
-      orderBy: { name: "asc" },
-    }),
-    prisma.transaction.findMany({
-      where: {
-        companyId: user.companyId,
-        deletedAt: null,
-        OR: [
-          { description: { contains: q, mode: "insensitive" } },
-          { notes: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      take: 5,
-      orderBy: { date: "desc" },
-    }),
-    prisma.category.findMany({
-      where: {
-        companyId: user.companyId,
-        deletedAt: null,
-        name: { contains: q, mode: "insensitive" },
-      },
-      take: 5,
-      orderBy: { name: "asc" },
-    }),
+    canViewCustomers
+      ? prisma.customer.findMany({
+          where: {
+            companyId: user.companyId,
+            deletedAt: null,
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { document: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 5,
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    canViewFinance
+      ? prisma.transaction.findMany({
+          where: {
+            companyId: user.companyId,
+            deletedAt: null,
+            OR: [
+              { description: { contains: q, mode: "insensitive" } },
+              { notes: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 5,
+          orderBy: { date: "desc" },
+        })
+      : Promise.resolve([]),
+    canViewFinance
+      ? prisma.category.findMany({
+          where: {
+            companyId: user.companyId,
+            deletedAt: null,
+            name: { contains: q, mode: "insensitive" },
+          },
+          take: 5,
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   return [

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { auth } from "@/shared/lib/auth";
+import { validateMembership } from "@/modules/auth/services/auth.service";
 import { assertPermission, hasPermission, type Permission } from "@/shared/lib/rbac";
 
 export type AppSessionUser = {
@@ -12,20 +13,37 @@ export type AppSessionUser = {
   emailVerified: Date | null;
 };
 
-export async function requireSession(): Promise<AppSessionUser> {
+/** Validates JWT session + live membership; returns fresh role from DB. */
+export async function getValidatedSessionUser(): Promise<AppSessionUser | null> {
   const session = await auth();
   if (!session?.user?.id || !session.user.companyId || !session.user.role) {
-    redirect("/login");
+    return null;
+  }
+
+  const membership = await validateMembership({
+    userId: session.user.id,
+    companyId: session.user.companyId,
+  });
+  if (!membership) {
+    return null;
   }
 
   return {
     id: session.user.id,
     name: session.user.name ?? null,
     email: session.user.email ?? null,
-    companyId: session.user.companyId,
-    role: session.user.role,
+    companyId: membership.companyId,
+    role: membership.role,
     emailVerified: session.user.emailVerified ?? null,
   };
+}
+
+export async function requireSession(): Promise<AppSessionUser> {
+  const user = await getValidatedSessionUser();
+  if (!user) {
+    redirect("/login");
+  }
+  return user;
 }
 
 export async function requirePermission(permission: Permission): Promise<AppSessionUser> {

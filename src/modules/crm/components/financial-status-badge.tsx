@@ -72,3 +72,29 @@ export function InstallmentStatusBadge({
     </span>
   );
 }
+
+const SALE_STATUS_META = {
+  PAID: { label: "Pago", className: "bg-emerald-50 text-emerald-700" },
+  PENDING: { label: "Pendente", className: "bg-amber-50 text-amber-700" },
+  PARTIAL: { label: "Parcial", className: "bg-sky-50 text-sky-700" },
+  OVERDUE: { label: "Atrasado", className: "bg-rose-50 text-rose-700" },
+  CANCELED: { label: "Cancelado", className: "bg-slate-100 text-slate-600" },
+} as const;
+
+export function SaleStatusBadge({
+  status,
+}: {
+  status: "PAID" | "PENDING" | "PARTIAL" | "OVERDUE" | "CANCELED";
+}) {
+  const meta = SALE_STATUS_META[status];
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+        meta.className,
+      )}
+    >
+      {meta.label}
+    </span>
+  );
+}

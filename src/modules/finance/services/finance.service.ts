@@ -1,8 +1,10 @@
 import { revalidateTag } from "next/cache";
+import { assertCanCreateTransaction } from "@/modules/billing/services/billing.service";
 import { prisma } from "@/shared/lib/prisma";
 import { assertTenantId } from "@/shared/lib/tenant";
 import { PrismaAuditLogRepository } from "@/shared/repositories/prisma-repositories";
 import { getDashboardCacheTag } from "@/modules/dashboard/services/dashboard.service";
+import { getReportsCacheTag } from "@/modules/reports/services/reports.service";
 import type {
   CashFlowSummaryDTO,
   CategoryClientDTO,
@@ -40,6 +42,7 @@ function invalidateFinanceCaches(companyId: string): void {
   try {
     revalidateTag(getFinanceCacheTag(companyId));
     revalidateTag(getDashboardCacheTag(companyId));
+    revalidateTag(getReportsCacheTag(companyId));
   } catch {
     // Outside Next.js request context (scripts/tests), skip cache invalidation.
   }
@@ -187,6 +190,7 @@ export async function createFinanceTransaction(params: {
   ip?: string | null;
   userAgent?: string | null;
 }): Promise<TransactionClientDTO> {
+  await assertCanCreateTransaction(params.companyId);
   const created = await transactions.create(params.companyId, params.data);
   const full = (await transactions.findById(params.companyId, created.id)) ?? created;
   await auditLogs.create({

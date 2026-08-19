@@ -1,4 +1,5 @@
 import { revalidateTag } from "next/cache";
+import { assertCanCreateCustomer } from "@/modules/billing/services/billing.service";
 import { PrismaAuditLogRepository } from "@/shared/repositories/prisma-repositories";
 import { getDashboardCacheTag } from "@/modules/dashboard/services/dashboard.service";
 import type {
@@ -68,6 +69,7 @@ export async function createCustomer(params: {
   ip?: string | null;
   userAgent?: string | null;
 }): Promise<CustomerClientDTO> {
+  await assertCanCreateCustomer(params.companyId);
   const created = await customers.create(params.companyId, params.data);
   await auditLogs.create({
     companyId: params.companyId,

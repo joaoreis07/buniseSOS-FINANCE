@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Bell, Building2, KeyRound, ScrollText, UserRound } from "lucide-react";
+import { confirmBillingReturnAction } from "@/modules/billing/actions/confirm-billing.action";
+import { PlansPanel } from "@/modules/billing/components/plans-panel";
+import type { BillingOverview } from "@/modules/billing/services/billing.service";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -47,14 +50,39 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function SettingsView({
   initialData,
+  billing,
   canManage,
 }: {
   initialData: SettingsOverviewDTO;
+  billing: BillingOverview;
   canManage: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState(initialData);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const billingStatus = searchParams.get("billing");
+    const plan = searchParams.get("plan");
+    if (billingStatus === "cancel") {
+      toast.message("Checkout cancelado. Seu plano não foi alterado.");
+      router.replace("/app/settings");
+      return;
+    }
+    if (billingStatus === "success" && plan && canManage) {
+      void (async () => {
+        const result = await confirmBillingReturnAction(plan);
+        if (result.success) {
+          toast.success("Pagamento confirmado. Plano atualizado!");
+        } else {
+          toast.message(result.message);
+        }
+        router.replace("/app/settings");
+        router.refresh();
+      })();
+    }
+  }, [searchParams, canManage, router]);
 
   const profileForm = useForm<CompanyProfileInput>({
     resolver: zodResolver(companyProfileSchema),
@@ -132,6 +160,12 @@ export function SettingsView({
           Empresa, preferências, notificações e trilha de auditoria.
         </p>
       </div>
+
+      <PlansPanel
+        initialBilling={billing}
+        company={data.company}
+        canManage={canManage}
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
@@ -231,6 +265,45 @@ export function SettingsView({
         </form>
       </section>
 
+      <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <ScrollText className="size-4 text-violet-700" />
+          <h3 className="font-semibold">Meta mensal de receita</h3>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Valor alvo usado no dashboard e no relatório mensal para medir o progresso do mês.
+        </p>
+        <div className="grid gap-2 sm:max-w-sm">
+          <Label htmlFor="monthlyGoal">Meta mensal (R$)</Label>
+          <Input
+            id="monthlyGoal"
+            disabled={!canManage}
+            inputMode="decimal"
+            placeholder="Ex: 10000"
+            {...settingsForm.register("monthlyGoal")}
+          />
+          {settingsForm.formState.errors.monthlyGoal && (
+            <p className="text-xs text-red-600">
+              {settingsForm.formState.errors.monthlyGoal.message}
+            </p>
+          )}
+        </div>
+        {canManage && (
+          <div className="mt-4">
+            <Button
+              type="button"
+              disabled={pending}
+              className="rounded-xl bg-blue-600 hover:bg-blue-700"
+              onClick={() => {
+                void onSaveSettings();
+              }}
+            >
+              {pending ? "Salvando..." : "Salvar meta e preferências"}
+            </Button>
+          </div>
+        )}
+      </section>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <ScrollText className="size-4 text-blue-600" />
@@ -283,28 +356,13 @@ export function SettingsView({
               />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="dateFormat">Formato de data</Label>
-              <Input
-                id="dateFormat"
-                disabled={!canManage}
-                {...settingsForm.register("dateFormat")}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="monthlyGoal">Meta mensal (R$)</Label>
-              <Input
-                id="monthlyGoal"
-                disabled={!canManage}
-                {...settingsForm.register("monthlyGoal")}
-              />
-              {settingsForm.formState.errors.monthlyGoal && (
-                <p className="text-xs text-red-600">
-                  {settingsForm.formState.errors.monthlyGoal.message}
-                </p>
-              )}
-            </div>
+          <div className="grid gap-2 sm:max-w-sm">
+            <Label htmlFor="dateFormat">Formato de data</Label>
+            <Input
+              id="dateFormat"
+              disabled={!canManage}
+              {...settingsForm.register("dateFormat")}
+            />
           </div>
           <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
             <div>

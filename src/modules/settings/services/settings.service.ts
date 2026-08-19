@@ -1,5 +1,6 @@
 import { revalidateTag } from "next/cache";
 import { getDashboardCacheTag } from "@/modules/dashboard/services/dashboard.service";
+import { getReportsCacheTag } from "@/modules/reports/services/reports.service";
 import type { Role } from "@prisma/client";
 import {
   PrismaAuditLogRepository,
@@ -31,6 +32,7 @@ function invalidateSettingsCaches(companyId: string): void {
   try {
     revalidateTag(getSettingsCacheTag(companyId));
     revalidateTag(getDashboardCacheTag(companyId));
+    revalidateTag(getReportsCacheTag(companyId));
   } catch {
     // Outside Next.js request context
   }
@@ -284,6 +286,43 @@ export async function updateCompanySettings(params: {
 
   invalidateSettingsCaches(params.companyId);
   return toSettingsClient(updated);
+}
+
+export async function updateMonthlyGoal(params: {
+  companyId: string;
+  userId: string;
+  monthlyGoal: number;
+  ip?: string | null;
+  userAgent?: string | null;
+}): Promise<CompanySettingsClientDTO> {
+  const existing = await settingsRepo.findByCompanyId(params.companyId);
+  const current =
+    existing ??
+    (await settingsRepo.upsert(params.companyId, {
+      theme: "light",
+      language: "pt-BR",
+      currency: "BRL",
+      timezone: "America/Sao_Paulo",
+      dateFormat: "dd/MM/yyyy",
+      notifications: true,
+      monthlyGoal: 0,
+    }));
+
+  return updateCompanySettings({
+    companyId: params.companyId,
+    userId: params.userId,
+    data: {
+      theme: current.theme,
+      language: current.language,
+      currency: current.currency,
+      timezone: current.timezone,
+      dateFormat: current.dateFormat,
+      notifications: current.notifications,
+      monthlyGoal: params.monthlyGoal,
+    },
+    ip: params.ip,
+    userAgent: params.userAgent,
+  });
 }
 
 export async function markNotificationRead(params: {

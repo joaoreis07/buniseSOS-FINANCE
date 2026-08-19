@@ -116,6 +116,7 @@ export type CreateNotificationDTO = {
   userId?: string | null;
   title: string;
   message: string;
+  category?: "FINANCE" | "CUSTOMERS" | "SYSTEM" | "INSTALLMENTS";
 };
 
 export type NotificationResponseDTO = {
@@ -123,6 +124,7 @@ export type NotificationResponseDTO = {
   companyId: string;
   userId: string | null;
   title: string;
+  category?: "FINANCE" | "CUSTOMERS" | "SYSTEM" | "INSTALLMENTS";
   message: string;
   read: boolean;
   createdAt: Date;

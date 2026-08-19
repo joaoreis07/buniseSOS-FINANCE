@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { getCrmDashboardStats } from "@/modules/crm/services/crm.service";
 import { prisma } from "@/shared/lib/prisma";
 import { assertTenantId } from "@/shared/lib/tenant";
 import type { DashboardResponseDTO } from "../dto/dashboard.dto";
@@ -172,6 +173,18 @@ async function loadDashboard(companyId: string): Promise<DashboardResponseDTO> {
     }),
   ]);
 
+  const crmStats = await getCrmDashboardStats(companyId).catch(() => ({
+    customersCount: activeCustomers,
+    overdueCustomers: 0,
+    totalReceivable: 0,
+    receivedMonth: 0,
+    pendingInstallments: 0,
+    paidInstallments: 0,
+    overdueInstallments: 0,
+    topCustomerName: null as string | null,
+    topCustomerAmount: 0,
+  }));
+
   const revenueMonth = sumByType(currentGrouped, "INCOME");
   const expensesMonth = sumByType(currentGrouped, "EXPENSE");
   const netProfitMonth = revenueMonth - expensesMonth;
@@ -330,6 +343,20 @@ async function loadDashboard(companyId: string): Promise<DashboardResponseDTO> {
       amount: item._sum.amount ? Number(item._sum.amount) : 0,
     })),
     appointmentsCount: null,
+    crm: {
+      customersCount: crmStats.customersCount,
+      overdueCustomers: crmStats.overdueCustomers,
+      totalReceivable: crmStats.totalReceivable,
+      formattedTotalReceivable: formatCurrency(crmStats.totalReceivable),
+      receivedMonth: crmStats.receivedMonth,
+      formattedReceivedMonth: formatCurrency(crmStats.receivedMonth),
+      pendingInstallments: crmStats.pendingInstallments,
+      paidInstallments: crmStats.paidInstallments,
+      overdueInstallments: crmStats.overdueInstallments,
+      topCustomerName: crmStats.topCustomerName,
+      topCustomerAmount: crmStats.topCustomerAmount,
+      formattedTopCustomerAmount: formatCurrency(crmStats.topCustomerAmount),
+    },
   };
 }
 

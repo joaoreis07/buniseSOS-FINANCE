@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SaleTotalsError, computeSaleFromItems, parseNumericInput } from "../lib/sale-totals";
 
 export const paymentMethodSchema = z.enum([
   "PIX",
@@ -11,12 +12,22 @@ export const paymentMethodSchema = z.enum([
   "OTHER",
 ]);
 
+export const saleItemInputSchema = z.object({
+  description: z.string().trim().min(1, "Informe a descrição do item"),
+  quantity: z.union([z.number(), z.string()]),
+  unitPrice: z.union([z.number(), z.string()]),
+  discountAmount: z.union([z.number(), z.string()]).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
 export const createSaleSchema = z
   .object({
     customerId: z.string().min(1, "Selecione o cliente"),
     description: z.string().trim().min(2, "Informe a descrição"),
     categoryId: z.string().optional(),
     totalAmount: z.string().trim().min(1, "Informe o valor"),
+    discountAmount: z.union([z.number(), z.string()]).optional(),
+    items: z.array(saleItemInputSchema).optional(),
     paymentMethod: paymentMethodSchema,
     paymentMode: z.enum(["CASH", "INSTALLMENT"]),
     cashStatus: z.enum(["PAID", "PENDING"]).optional(),
@@ -27,12 +38,62 @@ export const createSaleSchema = z
     notes: z.string().optional(),
   })
   .transform((data, ctx) => {
+    if (data.items && data.items.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe ao menos um item",
+        path: ["items"],
+      });
+      return z.NEVER;
+    }
+
+    const hasItems = Boolean(data.items && data.items.length > 0);
+
     const normalized = data.totalAmount.trim().replace(/[^\d.,-]/g, "");
-    const totalAmount = Number(
+    const parsedTotalAmount = Number(
       normalized.includes(",")
         ? normalized.replace(/\./g, "").replace(",", ".")
         : normalized,
     );
+    if (!hasItems && (!Number.isFinite(parsedTotalAmount) || parsedTotalAmount <= 0)) {
+      ctx.addIssue({ code: "custom", message: "Valor inválido", path: ["totalAmount"] });
+      return z.NEVER;
+    }
+
+    let items: Array<{
+      description: string;
+      quantity: number | string;
+      unitPrice: number | string;
+      discountAmount?: number | string;
+      sortOrder?: number;
+    }> | undefined;
+    let discountAmount = 0;
+    let totalAmount = parsedTotalAmount;
+
+    if (hasItems && data.items) {
+      try {
+        const generalDiscount =
+          data.discountAmount === undefined || data.discountAmount === ""
+            ? 0
+            : parseNumericInput(data.discountAmount, "Desconto geral");
+        const computed = computeSaleFromItems(data.items, generalDiscount);
+        items = data.items.map((item, index) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount ?? 0,
+          sortOrder: item.sortOrder ?? index,
+        }));
+        discountAmount = computed.discountAmount;
+        totalAmount = computed.totalAmount;
+      } catch (error) {
+        const message = error instanceof SaleTotalsError ? error.message : "Itens inválidos";
+        const path = error instanceof SaleTotalsError ? error.path.split(".") : ["items"];
+        ctx.addIssue({ code: "custom", message, path });
+        return z.NEVER;
+      }
+    }
+
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       ctx.addIssue({ code: "custom", message: "Valor inválido", path: ["totalAmount"] });
       return z.NEVER;
@@ -71,6 +132,8 @@ export const createSaleSchema = z
       description: data.description,
       categoryId: data.categoryId && data.categoryId !== "__none__" ? data.categoryId : null,
       totalAmount,
+      discountAmount,
+      items,
       paymentMethod: data.paymentMethod,
       paymentMode: data.paymentMethod === "CARD_CREDIT" ? ("CASH" as const) : data.paymentMode,
       cashStatus: data.paymentMethod === "CARD_CREDIT" ? ("PAID" as const) : data.cashStatus,

@@ -1,24 +1,35 @@
 import { revalidateTag } from "next/cache";
-import { addDays, addWeeks, addMonths, startOfDay, startOfMonth, endOfMonth } from "date-fns";
+import { startOfDay, startOfMonth, endOfMonth, endOfDay } from "date-fns";
+import type { PaymentMethod, Prisma } from "@prisma/client";
 import { getDashboardCacheTag } from "@/modules/dashboard/services/dashboard.service";
 import { getFinanceCacheTag } from "@/modules/finance/services/finance.service";
+import { getFilterRange } from "@/modules/finance/utils";
 import { getCustomersCacheTag } from "@/modules/customers/services/customer.service";
 import { prisma } from "@/shared/lib/prisma";
 import { assertCategoryBelongsToTenant } from "@/shared/lib/tenant-fk";
 import { assertTenantId } from "@/shared/lib/tenant";
 import { dueCivilDateKey, todayCivilDateKey } from "../lib/civil-date";
+import { buildDueDates, firstDueDateFromCivilKey } from "../lib/installment-schedule";
+import { resolveCreateSaleFinancials, splitAmount } from "../lib/sale-totals";
 import {
   buildCustomerInstallmentsBoard,
   computeFinancialStatus,
+  computeSaleStatus,
   money,
+  SALE_LIST_STATUS_LABELS,
+  type SaleDetailDTO,
   type CreateSaleInput,
   type CustomerCrmSummaryDTO,
   type CustomerListCrmItemDTO,
   type InstallmentDTO,
   type InstallmentPaymentHistoryDTO,
+  type ListSalesInput,
   type ReceiveInstallmentInput,
   type ReceivablesOverviewDTO,
   type SaleDTO,
+  type SaleListPeriod,
+  type SaleListResultDTO,
+  type SaleListStatus,
   type TimelineItemDTO,
   type UpdateInstallmentInput,
   type UpdateSaleInput,
@@ -100,37 +111,6 @@ function toInstallmentDto(item: {
     paymentMethod: item.paymentMethod,
     notes: item.notes,
   };
-}
-
-function buildDueDates(params: {
-  count: number;
-  firstDueDate: Date;
-  period: "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "CUSTOM";
-  customPeriodDays?: number;
-}): Date[] {
-  const dates: Date[] = [];
-  let cursor = startOfDay(params.firstDueDate);
-  for (let i = 0; i < params.count; i += 1) {
-    dates.push(cursor);
-    if (i === params.count - 1) break;
-    if (params.period === "WEEKLY") cursor = addWeeks(cursor, 1);
-    else if (params.period === "BIWEEKLY") cursor = addWeeks(cursor, 2);
-    else if (params.period === "MONTHLY") cursor = addMonths(cursor, 1);
-    else cursor = addDays(cursor, Math.max(1, params.customPeriodDays ?? 30));
-  }
-  return dates;
-}
-
-function splitAmount(total: number, count: number): number[] {
-  const cents = Math.round(total * 100);
-  const base = Math.floor(cents / count);
-  const parts = Array.from({ length: count }, () => base);
-  let remainder = cents - base * count;
-  for (let i = 0; i < parts.length && remainder > 0; i += 1) {
-    parts[i] += 1;
-    remainder -= 1;
-  }
-  return parts.map((value) => value / 100);
 }
 
 async function syncOverdueStatuses(companyId: string): Promise<void> {
@@ -412,7 +392,12 @@ export async function createSale(params: {
 }): Promise<{ saleId: string }> {
   assertTenantId(params.companyId);
   const data = params.data;
-  if (data.totalAmount <= 0) throw new Error("Informe um valor válido");
+  const financials = resolveCreateSaleFinancials({
+    totalAmount: data.totalAmount,
+    discountAmount: data.discountAmount,
+    items: data.items,
+  });
+  if (financials.totalAmount <= 0) throw new Error("Informe um valor válido");
 
   // Cartão de crédito (maquininha): o parcelamento é do banco, não do cliente.
   // Registra como venda à vista paga — sem parcelas a receber.
@@ -438,10 +423,10 @@ export async function createSale(params: {
     paymentMode === "CASH"
       ? startOfDay(soldAt)
       : data.firstDueDate
-        ? startOfDay(new Date(`${data.firstDueDate.slice(0, 10)}T12:00:00`))
+        ? firstDueDateFromCivilKey(data.firstDueDate)
         : startOfDay(soldAt);
   const period = data.period ?? "MONTHLY";
-  const amounts = splitAmount(data.totalAmount, count);
+  const amounts = splitAmount(financials.totalAmount, count);
   const dueDates =
     paymentMode === "CASH"
       ? [firstDue]
@@ -459,7 +444,8 @@ export async function createSale(params: {
         customerId: data.customerId,
         description: data.description,
         categoryId: data.categoryId || null,
-        totalAmount: data.totalAmount,
+        totalAmount: financials.totalAmount,
+        discountAmount: financials.discountAmount,
         paymentMethod: data.paymentMethod,
         paymentMode,
         installmentsCount: count,
@@ -470,6 +456,21 @@ export async function createSale(params: {
         notes: mergedNotes,
       },
     });
+
+    if (financials.items) {
+      await tx.saleItem.createMany({
+        data: financials.items.map((item) => ({
+          companyId: params.companyId,
+          saleId: sale.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount,
+          lineTotal: item.lineTotal,
+          sortOrder: item.sortOrder,
+        })),
+      });
+    }
 
     for (let i = 0; i < count; i += 1) {
       const isCashPaid = paymentMode === "CASH" && cashStatus === "PAID";
@@ -561,7 +562,9 @@ export async function createSale(params: {
         entityId: sale.id,
         metadata: {
           customerId: data.customerId,
-          totalAmount: data.totalAmount,
+          totalAmount: financials.totalAmount,
+          discountAmount: financials.discountAmount,
+          itemCount: financials.items?.length ?? 0,
           paymentMode,
           paymentMethod: data.paymentMethod,
           cardCreditSettled: isCardCredit,
@@ -578,7 +581,7 @@ export async function createSale(params: {
       companyId: params.companyId,
       userId: params.userId,
       title: "Nova venda",
-      message: `${data.description} · ${money(data.totalAmount).formatted}`,
+      message: `${data.description} · ${money(financials.totalAmount).formatted}`,
       category: "CUSTOMERS",
     },
   }).catch(() => undefined);
@@ -1116,5 +1119,360 @@ export async function getCrmDashboardStats(companyId: string): Promise<{
     overdueInstallments,
     topCustomerName,
     topCustomerAmount,
+  };
+}
+
+const SALE_PERIOD_LABELS: Record<SaleListPeriod, string> = {
+  hoje: "Hoje",
+  ontem: "Ontem",
+  semana: "Esta semana",
+  mes: "Este mês",
+  todos: "Todo o período",
+  personalizado: "Período selecionado",
+};
+
+function saleSearchFilter(search: string | undefined): Prisma.SaleWhereInput | undefined {
+  const query = search?.trim().replace(/^#/, "");
+  if (!query) return undefined;
+  return {
+    OR: [
+      { description: { contains: query, mode: "insensitive" } },
+      { customer: { name: { contains: query, mode: "insensitive" } } },
+      { id: { contains: query, mode: "insensitive" } },
+    ],
+  };
+}
+
+function saleStatusFilter(status: "ALL" | SaleListStatus | undefined): Prisma.SaleWhereInput {
+  if (!status || status === "ALL") {
+    return { deletedAt: null };
+  }
+  if (status === "CANCELED") {
+    return { deletedAt: { not: null } };
+  }
+
+  const openInstallment = { deletedAt: null };
+  if (status === "PAID") {
+    return {
+      deletedAt: null,
+      installments: {
+        some: openInstallment,
+        every: { OR: [{ deletedAt: { not: null } }, { status: "PAID" }] },
+      },
+    };
+  }
+  if (status === "OVERDUE") {
+    return {
+      deletedAt: null,
+      installments: { some: { ...openInstallment, status: "OVERDUE" } },
+    };
+  }
+  if (status === "PARTIAL") {
+    return {
+      deletedAt: null,
+      AND: [
+        {
+          installments: {
+            some: {
+              ...openInstallment,
+              status: { in: ["PENDING", "OVERDUE"] },
+              payments: { some: { deletedAt: null } },
+            },
+          },
+        },
+        { installments: { none: { ...openInstallment, status: "OVERDUE" } } },
+      ],
+    };
+  }
+  return {
+    deletedAt: null,
+    AND: [
+      { installments: { some: { ...openInstallment, status: "PENDING" } } },
+      { installments: { none: { ...openInstallment, status: "OVERDUE" } } },
+      {
+        installments: {
+          none: {
+            ...openInstallment,
+            status: { in: ["PENDING", "OVERDUE"] },
+            payments: { some: { deletedAt: null } },
+          },
+        },
+      },
+    ],
+  };
+}
+
+function saleSoldAtFilter(input: ListSalesInput): Prisma.DateTimeFilter | undefined {
+  const period = input.period ?? "mes";
+  if (period === "todos") return undefined;
+  const range = getFilterRange(
+    period === "personalizado" ? "personalizado" : period,
+    input.customFrom,
+    input.customTo,
+  );
+  if (!range) return undefined;
+  return { gte: startOfDay(range.from), lte: endOfDay(range.to) };
+}
+
+function paymentConditionLabel(mode: "CASH" | "INSTALLMENT", count: number): string {
+  if (mode === "INSTALLMENT") {
+    return `Parcelado ${count}x`;
+  }
+  return "À vista";
+}
+
+function saleCode(id: string): string {
+  return id.slice(-6).toUpperCase();
+}
+
+export async function listSales(params: {
+  companyId: string;
+  filters?: ListSalesInput;
+}): Promise<SaleListResultDTO> {
+  assertTenantId(params.companyId);
+  await syncOverdueStatuses(params.companyId);
+
+  const filters = params.filters ?? {};
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 20));
+  const period = filters.period ?? "mes";
+  const paymentMethod =
+    filters.paymentMethod && filters.paymentMethod !== "ALL"
+      ? (filters.paymentMethod as PaymentMethod)
+      : undefined;
+
+  const soldAt = saleSoldAtFilter(filters);
+  const where: Prisma.SaleWhereInput = {
+    companyId: params.companyId,
+    ...saleStatusFilter(filters.status),
+    ...(saleSearchFilter(filters.search) ?? {}),
+    ...(paymentMethod ? { paymentMethod } : {}),
+    ...(soldAt ? { soldAt } : {}),
+  };
+  const indicatorWhere: Prisma.SaleWhereInput = {
+    companyId: params.companyId,
+    deletedAt: null,
+    ...(paymentMethod ? { paymentMethod } : {}),
+    ...(soldAt ? { soldAt } : {}),
+  };
+
+  const [total, aggregated, rows] = await Promise.all([
+    prisma.sale.count({ where }),
+    prisma.sale.aggregate({
+      where: indicatorWhere,
+      _sum: { totalAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.sale.findMany({
+      where,
+      orderBy: { soldAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: {
+        customer: { select: { id: true, name: true } },
+        installments: {
+          where: { deletedAt: null },
+          select: {
+            status: true,
+            amount: true,
+            dueDate: true,
+            payments: { where: { deletedAt: null }, select: { amount: true } },
+          },
+        },
+        _count: { select: { items: { where: { deletedAt: null } } } },
+      },
+    }),
+  ]);
+
+  const totalSold = roundMoney(Number(aggregated._sum.totalAmount ?? 0));
+  const salesCount = aggregated._count._all;
+  const averageTicket = salesCount > 0 ? roundMoney(totalSold / salesCount) : 0;
+
+  const items = rows.map((sale) => {
+    const status = computeSaleStatus({
+      deletedAt: sale.deletedAt,
+      installments: sale.installments,
+    });
+    return {
+      id: sale.id,
+      code: saleCode(sale.id),
+      soldAt: sale.soldAt.toISOString(),
+      customerId: sale.customer?.id ?? sale.customerId,
+      customerName: sale.customer?.name?.trim() ? sale.customer.name : "Sem cliente",
+      description: sale.description,
+      totalAmount: roundMoney(Number(sale.totalAmount)),
+      formattedTotalAmount: money(Number(sale.totalAmount)).formatted,
+      paymentMethod: sale.paymentMethod,
+      paymentMode: sale.paymentMode,
+      paymentConditionLabel: paymentConditionLabel(sale.paymentMode, sale.installmentsCount),
+      installmentsCount: sale.installmentsCount,
+      itemCount: sale._count.items,
+      status,
+      statusLabel: SALE_LIST_STATUS_LABELS[status],
+    };
+  });
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    indicators: {
+      salesCount,
+      totalSold,
+      averageTicket,
+      formattedTotalSold: money(totalSold).formatted,
+      formattedAverageTicket: money(averageTicket).formatted,
+      periodLabel: SALE_PERIOD_LABELS[period],
+    },
+  };
+}
+
+export async function getSaleCrmDetail(
+  companyId: string,
+  saleId: string,
+): Promise<SaleDetailDTO | null> {
+  assertTenantId(companyId);
+  await syncOverdueStatuses(companyId);
+
+  const sale = await prisma.sale.findFirst({
+    where: { id: saleId, companyId },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          whatsapp: true,
+          document: true,
+          address: true,
+          city: true,
+          state: true,
+          notes: true,
+          status: true,
+        },
+      },
+      items: {
+        where: { deletedAt: null },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          discountAmount: true,
+          lineTotal: true,
+          sortOrder: true,
+        },
+      },
+      installments: {
+        orderBy: { number: "asc" },
+        include: {
+          payments: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              amount: true,
+              paidAt: true,
+              paymentMethod: true,
+              notes: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!sale) return null;
+
+  const status = computeSaleStatus({
+    deletedAt: sale.deletedAt,
+    installments: sale.installments.map((inst) => ({
+      status: inst.status,
+      amount: inst.amount,
+      dueDate: inst.dueDate,
+      payments: inst.payments?.map((p) => ({ amount: p.amount })),
+    })),
+  });
+
+  const itemDiscountTotal = sale.items.reduce((acc, item) => acc + Number(item.discountAmount), 0);
+  const generalDiscount = roundMoney(Number(sale.discountAmount));
+  const total = roundMoney(Number(sale.totalAmount));
+  const subtotal = roundMoney(total + generalDiscount + roundMoney(itemDiscountTotal));
+
+  const installmentDtos: InstallmentDTO[] = sale.installments.map((inst) =>
+    toInstallmentDto({
+      id: inst.id,
+      saleId: inst.saleId,
+      number: inst.number,
+      amount: inst.amount,
+      dueDate: inst.dueDate,
+      status: inst.status,
+      paidAt: inst.paidAt,
+      paymentMethod: inst.paymentMethod,
+      notes: inst.notes,
+      sale: {
+        description: sale.description,
+        customerId: sale.customerId,
+        customer: { name: sale.customer.name },
+      },
+      payments: inst.payments?.map((p) => ({ amount: p.amount })),
+    }),
+  );
+
+  const payments: InstallmentPaymentHistoryDTO[] = sale.installments
+    .flatMap((inst) =>
+      inst.payments.map((payment) => ({
+        id: payment.id,
+        installmentId: inst.id,
+        installmentNumber: inst.number,
+        saleDescription: sale.description,
+        amount: roundMoney(Number(payment.amount)),
+        formattedAmount: money(Number(payment.amount)).formatted,
+        paidAt: payment.paidAt.toISOString(),
+        paymentMethod: payment.paymentMethod,
+        notes: payment.notes,
+      })),
+    )
+    .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
+
+  const saleFinancial: SaleDetailDTO["financial"] = {
+    subtotal,
+    itemDiscountTotal: roundMoney(itemDiscountTotal),
+    generalDiscount,
+    total,
+  };
+
+  return {
+    sale: {
+      id: sale.id,
+      code: saleCode(sale.id),
+      soldAt: sale.soldAt.toISOString(),
+      status,
+      statusLabel: SALE_LIST_STATUS_LABELS[status],
+      description: sale.description,
+      categoryId: sale.categoryId,
+      totalAmount: total,
+      discountAmount: generalDiscount,
+      paymentMethod: sale.paymentMethod,
+      paymentMode: sale.paymentMode,
+      installmentsCount: sale.installmentsCount,
+      notes: sale.notes,
+      paymentConditionLabel: paymentConditionLabel(sale.paymentMode, sale.installmentsCount),
+    },
+    customer: sale.customer,
+    items: sale.items.map((item) => ({
+      id: item.id,
+      description: item.description,
+      quantity: Number(item.quantity),
+      unitPrice: roundMoney(Number(item.unitPrice)),
+      discountAmount: roundMoney(Number(item.discountAmount)),
+      lineTotal: roundMoney(Number(item.lineTotal)),
+      sortOrder: item.sortOrder,
+    })),
+    financial: saleFinancial,
+    installments: installmentDtos,
+    payments,
   };
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { auth } from "@/shared/lib/auth";
-import { hasPermission } from "@/shared/lib/rbac";
+import { resolveApiPermission } from "@/shared/lib/api-session";
 import {
   createCustomerSchema,
   customerListQuerySchema,
@@ -12,13 +11,11 @@ import {
 } from "@/modules/customers/services/customer.service";
 
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("customers:view");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "customers:view")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   try {
     const url = new URL(request.url);
@@ -28,7 +25,7 @@ export async function GET(request: Request) {
       page: url.searchParams.get("page") ?? undefined,
       pageSize: url.searchParams.get("pageSize") ?? undefined,
     });
-    const data = await listCustomers(session.user.companyId, query);
+    const data = await listCustomers(user.companyId, query);
     return NextResponse.json(data);
   } catch (error) {
     if (error instanceof ZodError) {
@@ -42,20 +39,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("customers:manage");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "customers:manage")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   try {
     const body = await request.json();
     const data = createCustomerSchema.parse(body);
     const created = await createCustomer({
-      companyId: session.user.companyId,
-      userId: session.user.id,
+      companyId: user.companyId,
+      userId: user.id,
       data,
       ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
       userAgent: request.headers.get("user-agent"),

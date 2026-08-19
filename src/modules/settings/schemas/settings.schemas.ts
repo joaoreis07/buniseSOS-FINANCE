@@ -46,5 +46,22 @@ export const notificationIdSchema = z.object({
   id: z.string().min(1),
 });
 
+export const monthlyGoalSchema = z
+  .object({
+    monthlyGoal: z.string().trim().min(1, "Informe a meta mensal"),
+  })
+  .transform((data, ctx) => {
+    const monthlyGoal = Number(data.monthlyGoal.replace(",", ".").replace(/[^\d.-]/g, ""));
+    if (!Number.isFinite(monthlyGoal) || monthlyGoal < 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe uma meta válida",
+        path: ["monthlyGoal"],
+      });
+      return z.NEVER;
+    }
+    return { monthlyGoal };
+  });
+
 export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
 export type CompanySettingsFormInput = z.infer<typeof companySettingsFormSchema>;

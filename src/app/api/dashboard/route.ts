@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/shared/lib/auth";
-import { hasPermission } from "@/shared/lib/rbac";
+import { resolveApiPermission } from "@/shared/lib/api-session";
 import { getDashboardData } from "@/modules/dashboard/services/dashboard.service";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("dashboard:view");
+  if (!authResult.ok) {
+    return authResult.response;
   }
 
-  if (!hasPermission(session.user.role, "dashboard:view")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
-
-  const data = await getDashboardData(session.user.companyId);
+  const data = await getDashboardData(authResult.user.companyId);
   return NextResponse.json(data);
 }

@@ -1,5 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/shared/lib/prisma";
+import {
+  assertCategoryBelongsToTenant,
+  assertCustomerBelongsToTenant,
+} from "@/shared/lib/tenant-fk";
 import { assertTenantId } from "@/shared/lib/tenant";
 import type {
   CategoryResponseDTO,
@@ -16,6 +20,7 @@ import type { ICategoryRepository, ITransactionRepository } from "./finance.repo
 export class PrismaCategoryRepository implements ICategoryRepository {
   async create(companyId: string, data: CreateCategoryDTO): Promise<CategoryResponseDTO> {
     assertTenantId(companyId);
+    await assertCategoryBelongsToTenant(companyId, data.parentId ?? null);
     const category = await prisma.category.create({
       data: {
         companyId,
@@ -41,8 +46,11 @@ export class PrismaCategoryRepository implements ICategoryRepository {
     if (!existing) {
       throw new Error("Category not found");
     }
+    if (data.parentId !== undefined) {
+      await assertCategoryBelongsToTenant(companyId, data.parentId);
+    }
     const category = await prisma.category.update({
-      where: { id },
+      where: { id, companyId },
       data: {
         name: data.name,
         type: data.type,
@@ -63,7 +71,7 @@ export class PrismaCategoryRepository implements ICategoryRepository {
       throw new Error("Category not found");
     }
     await prisma.category.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }
@@ -96,6 +104,8 @@ export class PrismaTransactionRepository implements ITransactionRepository {
     data: CreateTransactionDTO,
   ): Promise<TransactionResponseDTO> {
     assertTenantId(companyId);
+    await assertCategoryBelongsToTenant(companyId, data.categoryId ?? null);
+    await assertCustomerBelongsToTenant(companyId, data.customerId ?? null);
     const transaction = await prisma.transaction.create({
       data: {
         companyId,
@@ -127,8 +137,14 @@ export class PrismaTransactionRepository implements ITransactionRepository {
     if (!existing) {
       throw new Error("Transaction not found");
     }
+    if (data.categoryId !== undefined) {
+      await assertCategoryBelongsToTenant(companyId, data.categoryId);
+    }
+    if (data.customerId !== undefined) {
+      await assertCustomerBelongsToTenant(companyId, data.customerId);
+    }
     const transaction = await prisma.transaction.update({
-      where: { id },
+      where: { id, companyId },
       data: {
         type: data.type,
         status: data.status,
@@ -155,7 +171,7 @@ export class PrismaTransactionRepository implements ITransactionRepository {
       throw new Error("Transaction not found");
     }
     await prisma.transaction.update({
-      where: { id },
+      where: { id, companyId },
       data: { deletedAt: new Date() },
     });
   }
@@ -178,7 +194,7 @@ export class PrismaTransactionRepository implements ITransactionRepository {
   ): Promise<{ items: TransactionResponseDTO[]; total: number }> {
     assertTenantId(companyId);
     const page = Math.max(1, params.page ?? 1);
-    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
+    const pageSize = Math.min(500, Math.max(1, params.pageSize ?? 20));
     const where: Prisma.TransactionWhereInput = {
       companyId,
       deletedAt: null,

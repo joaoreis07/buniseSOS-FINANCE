@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import type { JWT } from "next-auth/jwt";
+import { isDemoAccountEmail } from "@/shared/lib/demo-account";
 
 const authPages = new Set([
   "/login",
@@ -38,12 +40,55 @@ async function readAuthToken(request: NextRequest) {
   return null;
 }
 
+function clearAuthSessionCookies(response: NextResponse, request: NextRequest) {
+  const secureCookie = request.nextUrl.protocol === "https:";
+  for (const cookie of request.cookies.getAll()) {
+    const name = cookie.name;
+    if (
+      !name.includes("authjs.session-token") &&
+      !name.includes("next-auth.session-token")
+    ) {
+      continue;
+    }
+    response.cookies.set(name, "", {
+      path: "/",
+      maxAge: 0,
+      secure: secureCookie,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+  }
+}
+
+function hasAuthSessionCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some(
+    (c) =>
+      c.name.includes("authjs.session-token") ||
+      c.name.includes("next-auth.session-token"),
+  );
+}
+
+function isActiveToken(token: JWT | null): boolean {
+  return Boolean(
+    token?.sub &&
+      typeof token.companyId === "string" &&
+      typeof token.role === "string" &&
+      !token.invalidated,
+  );
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = await readAuthToken(request);
-
-  const isLoggedIn = Boolean(token);
-  const isAppRoute = pathname.startsWith("/app") || pathname.startsWith("/change-password");
+  const rawToken = await readAuthToken(request);
+  const token = rawToken && typeof rawToken === "object" ? (rawToken as JWT) : null;
+  const isLoggedIn = isActiveToken(token);
+  const isDemo = isDemoAccountEmail(
+    typeof token?.email === "string" ? token.email : null,
+  );
+  const isAppRoute =
+    pathname.startsWith("/app") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/change-password");
   const isAuthPage = authPages.has(pathname);
 
   if (isAppRoute && !isLoggedIn) {
@@ -52,8 +97,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthPage && isLoggedIn && pathname !== "/verify-email") {
-    return NextResponse.redirect(new URL("/app", request.url));
+  // Demo session must not trap users: allow leaving to create/login a real account.
+  if (
+    isLoggedIn &&
+    isDemo &&
+    (pathname === "/register" || pathname === "/login" || pathname === "/criar-conta")
+  ) {
+    const response =
+      pathname === "/criar-conta"
+        ? NextResponse.redirect(new URL("/register", request.url))
+        : NextResponse.next();
+    clearAuthSessionCookies(response, request);
+    return response;
+  }
+
+  if (isAuthPage && !isLoggedIn && hasAuthSessionCookie(request)) {
+    const response = NextResponse.next();
+    clearAuthSessionCookies(response, request);
+    return response;
   }
 
   return NextResponse.next();
@@ -62,9 +123,12 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/app/:path*",
+    "/admin",
+    "/admin/:path*",
     "/change-password",
     "/login",
     "/register",
+    "/criar-conta",
     "/forgot-password",
     "/reset-password",
     "/verify-email",

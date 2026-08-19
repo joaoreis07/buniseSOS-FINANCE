@@ -10,6 +10,7 @@ import type {
 } from "../dto/settings.dto";
 import {
   companyProfileSchema,
+  monthlyGoalSchema,
   notificationIdSchema,
   updateSettingsPayloadSchema,
 } from "../schemas/settings.schemas";
@@ -18,6 +19,7 @@ import {
   markNotificationRead,
   updateCompanyProfile,
   updateCompanySettings,
+  updateMonthlyGoal,
 } from "../services/settings.service";
 
 export type SettingsActionResult<T = undefined> =
@@ -104,6 +106,30 @@ export async function updateCompanySettingsAction(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Não foi possível salvar as preferências",
+    };
+  }
+}
+
+export async function updateMonthlyGoalAction(
+  input: unknown,
+): Promise<SettingsActionResult<CompanySettingsClientDTO>> {
+  try {
+    const user = await requirePermission("settings:manage");
+    const data = monthlyGoalSchema.parse(input);
+    const meta = await requestMeta();
+    const updated = await updateMonthlyGoal({
+      companyId: user.companyId,
+      userId: user.id,
+      monthlyGoal: data.monthlyGoal,
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    return { success: true, data: updated, message: "Meta mensal atualizada" };
+  } catch (error) {
+    if (error instanceof ZodError) return { success: false, error: zodMessage(error) };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Não foi possível salvar a meta",
     };
   }
 }

@@ -5,7 +5,7 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && node ./scripts/migrate-deploy.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -22,6 +22,7 @@
     "db:verify:finance": "tsx prisma/verify-finance.ts",
     "db:verify:settings": "tsx prisma/verify-settings.ts",
     "smoke:e2e": "tsx prisma/smoke-e2e.ts",
+    "admin:ensure": "tsx scripts/ensure-platform-admin.ts",
     "db:studio": "prisma studio"
   },
   "prisma": {
@@ -68,8 +69,9 @@
     "lucide-react": "0.487.0",
     "motion": "12.23.24",
     "next": "^15.5.2",
-    "next-auth": "5.0.0-beta.25",
+    "next-auth": "5.0.0-beta.32",
     "next-themes": "0.4.6",
+    "pdfmake": "^0.3.11",
     "react": "^19.1.1",
     "react-day-picker": "8.10.1",
     "react-dom": "^19.1.1",
@@ -87,6 +89,7 @@
     "@tailwindcss/postcss": "^4.1.12",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.17.2",
+    "@types/pdfmake": "^0.3.3",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "eslint": "^9.33.0",

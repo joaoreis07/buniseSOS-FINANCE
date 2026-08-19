@@ -57,9 +57,48 @@ export type AuthMembership = {
   role: Role;
 };
 
+export async function bumpUserSessionVersion(userId: string): Promise<number> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { sessionVersion: { increment: 1 } },
+    select: { sessionVersion: true },
+  });
+  return user.sessionVersion;
+}
+
+export async function getUserSessionVersion(userId: string): Promise<number | null> {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { sessionVersion: true },
+  });
+  return user?.sessionVersion ?? null;
+}
+
+export async function validateMembership(params: {
+  userId: string;
+  companyId: string;
+}): Promise<AuthMembership | null> {
+  const membership = await prisma.membership.findFirst({
+    where: {
+      userId: params.userId,
+      companyId: params.companyId,
+      deletedAt: null,
+      company: { deletedAt: null },
+    },
+  });
+  if (!membership) {
+    return null;
+  }
+  return { companyId: membership.companyId, role: membership.role };
+}
+
 export async function getPrimaryMembership(userId: string): Promise<AuthMembership | null> {
   const membership = await prisma.membership.findFirst({
-    where: { userId, deletedAt: null },
+    where: {
+      userId,
+      deletedAt: null,
+      company: { deletedAt: null },
+    },
     orderBy: { createdAt: "asc" },
   });
   if (!membership) {
@@ -196,6 +235,7 @@ export async function resetPasswordWithToken(token: string, password: string): P
     where: { id: user.id },
     data: { passwordHash },
   });
+  await bumpUserSessionVersion(user.id);
 
   await prisma.auditLog.create({
     data: {
@@ -250,6 +290,7 @@ export async function changePassword(
     where: { id: user.id },
     data: { passwordHash },
   });
+  await bumpUserSessionVersion(user.id);
 
   await prisma.auditLog.create({
     data: {

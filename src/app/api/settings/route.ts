@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { auth } from "@/shared/lib/auth";
-import { hasPermission } from "@/shared/lib/rbac";
+import { resolveApiPermission } from "@/shared/lib/api-session";
 import {
   companyProfileSchema,
   updateSettingsPayloadSchema,
@@ -13,32 +12,28 @@ import {
 } from "@/modules/settings/services/settings.service";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("settings:view");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "settings:view")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   const data = await getSettingsOverview({
-    companyId: session.user.companyId,
-    userId: session.user.id,
-    userName: session.user.name ?? null,
-    userEmail: session.user.email ?? null,
-    role: session.user.role,
+    companyId: user.companyId,
+    userId: user.id,
+    userName: user.name,
+    userEmail: user.email,
+    role: user.role,
   });
   return NextResponse.json(data);
 }
 
 export async function PATCH(request: Request) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("settings:manage");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "settings:manage")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   try {
     const body = (await request.json()) as {
@@ -52,8 +47,8 @@ export async function PATCH(request: Request) {
     if (section === "profile") {
       const data = companyProfileSchema.parse(body.data ?? body);
       const updated = await updateCompanyProfile({
-        companyId: session.user.companyId,
-        userId: session.user.id,
+        companyId: user.companyId,
+        userId: user.id,
         data,
         ip,
         userAgent,
@@ -63,8 +58,8 @@ export async function PATCH(request: Request) {
 
     const data = updateSettingsPayloadSchema.parse(body.data ?? body);
     const updated = await updateCompanySettings({
-      companyId: session.user.companyId,
-      userId: session.user.id,
+      companyId: user.companyId,
+      userId: user.id,
       data,
       ip,
       userAgent,

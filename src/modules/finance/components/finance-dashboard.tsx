@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useForm } from "react-hook-form";
@@ -10,6 +10,10 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Handshake,
+  Pencil,
   Plus,
   Search,
   Tags,
@@ -17,6 +21,8 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import { addMonths, endOfMonth, format, parseISO, startOfMonth, subMonths } from "date-fns";
+import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -49,6 +55,9 @@ import {
   createTransactionAction,
   deleteCategoryAction,
   deleteTransactionAction,
+  getFinanceOverviewAction,
+  listTransactionsAction,
+  updateTransactionAction,
 } from "../actions/finance.actions";
 import {
   createCategorySchema,
@@ -57,13 +66,15 @@ import {
   type TransactionFormInput,
 } from "../schemas/finance.schemas";
 import type { DateFilter, PaymentMethod, TransactionStatus } from "../types";
-import { PAYMENT_METHOD_LABELS, STATUS_LABELS } from "../types";
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_OPTIONS, STATUS_LABELS } from "../types";
 import {
   formatCurrency,
   formatDateBR,
   formatLongDate,
+  formatMonthYear,
   isInFilterRange,
   toDateInputValue,
+  toMonthStartIso,
 } from "../utils";
 import { PaymentBadge } from "./payment-badge";
 
@@ -76,6 +87,7 @@ const DATE_FILTERS: { id: DateFilter; label: string }[] = [
 ];
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const CURRENT_MONTH = toMonthStartIso(TODAY);
 
 function StatCard({
   label,
@@ -169,6 +181,7 @@ export function FinanceDashboard({
   const [todayCount, setTodayCount] = useState(initialData.todayCount);
 
   const [filter, setFilter] = useState<DateFilter>("mes");
+  const [viewMonth, setViewMonth] = useState(CURRENT_MONTH);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<"todos" | "INCOME" | "EXPENSE">("todos");
@@ -176,7 +189,9 @@ export function FinanceDashboard({
   const [methodFilter, setMethodFilter] = useState<"todos" | PaymentMethod>("todos");
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const form = useForm<TransactionFormInput>({
@@ -199,11 +214,68 @@ export function FinanceDashboard({
     defaultValues: { name: "", type: "INCOME" },
   });
 
+  const applyOverviewMeta = (data: FinanceOverviewDTO) => {
+    setCashFlow(data.cashFlow);
+    setTodayIncome(data.todayIncome);
+    setTodayExpense(data.todayExpense);
+    setTodayCount(data.todayCount);
+    setCategories(data.categories);
+  };
+
+  const loadMonthTransactions = async (monthIso: string) => {
+    const anchor = parseISO(monthIso.slice(0, 10));
+    const dateFrom = format(startOfMonth(anchor), "yyyy-MM-dd");
+    const dateTo = format(endOfMonth(anchor), "yyyy-MM-dd");
+    setListLoading(true);
+    try {
+      const result = await listTransactionsAction({
+        dateFrom,
+        dateTo,
+        page: 1,
+        pageSize: 500,
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setTransactions(result.data.items);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  const loadRecentTransactions = async () => {
+    setListLoading(true);
+    try {
+      const result = await getFinanceOverviewAction();
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setTransactions(result.data.transactions);
+      applyOverviewMeta(result.data);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (filter === "mes") {
+      void loadMonthTransactions(viewMonth);
+      return;
+    }
+    if (filter === "personalizado") {
+      return;
+    }
+    void loadRecentTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when filter/month changes
+  }, [filter, viewMonth]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return transactions
       .filter((item) =>
-        isInFilterRange(item.date, filter, customFrom, customTo, TODAY),
+        isInFilterRange(item.date, filter, customFrom, customTo, TODAY, viewMonth),
       )
       .filter((item) => (typeFilter === "todos" ? true : item.type === typeFilter))
       .filter((item) => (statusFilter === "todos" ? true : item.status === statusFilter))
@@ -220,7 +292,54 @@ export function FinanceDashboard({
         );
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, filter, customFrom, customTo, typeFilter, statusFilter, methodFilter, search]);
+  }, [
+    transactions,
+    filter,
+    customFrom,
+    customTo,
+    typeFilter,
+    statusFilter,
+    methodFilter,
+    search,
+    viewMonth,
+  ]);
+
+  const viewingCurrentMonth = viewMonth === CURRENT_MONTH;
+  const canGoNextMonth = viewMonth < CURRENT_MONTH;
+
+  const selectDateFilter = (next: DateFilter) => {
+    if (next === "mes") {
+      setViewMonth(CURRENT_MONTH);
+    }
+    setFilter(next);
+  };
+
+  const goPrevMonth = () => {
+    setFilter("mes");
+    setViewMonth(format(startOfMonth(subMonths(parseISO(viewMonth), 1)), "yyyy-MM-dd"));
+  };
+
+  const goNextMonth = () => {
+    if (!canGoNextMonth) return;
+    setFilter("mes");
+    setViewMonth(format(startOfMonth(addMonths(parseISO(viewMonth), 1)), "yyyy-MM-dd"));
+  };
+
+  const refreshAfterMutation = async (nextLocal?: TransactionClientDTO[]) => {
+    if (nextLocal) setTransactions(nextLocal);
+
+    const overview = await getFinanceOverviewAction();
+    if (overview.success) {
+      applyOverviewMeta(overview.data);
+      if (filter !== "mes") {
+        setTransactions(overview.data.transactions);
+      }
+    }
+
+    if (filter === "mes") {
+      await loadMonthTransactions(viewMonth);
+    }
+  };
 
   const periodIncome = filtered
     .filter((item) => item.type === "INCOME" && item.status === "PAID")
@@ -234,41 +353,8 @@ export function FinanceDashboard({
   const selectedType = form.watch("type");
   const categoriesForType = categories.filter((item) => item.type === selectedType);
 
-  const refreshLocalTotals = (next: TransactionClientDTO[]) => {
-    const todayRows = next.filter((item) => toDateInputValue(item.date) === TODAY);
-    setTodayIncome(
-      todayRows
-        .filter((item) => item.type === "INCOME" && item.status === "PAID")
-        .reduce((sum, item) => sum + item.amount, 0),
-    );
-    setTodayExpense(
-      todayRows
-        .filter((item) => item.type === "EXPENSE" && item.status === "PAID")
-        .reduce((sum, item) => sum + item.amount, 0),
-    );
-    setTodayCount(todayRows.length);
-
-    let incomePaid = 0;
-    let expensePaid = 0;
-    let pendingIncome = 0;
-    let overdueIncome = 0;
-    for (const item of next) {
-      if (item.type === "INCOME" && item.status === "PAID") incomePaid += item.amount;
-      if (item.type === "EXPENSE" && item.status === "PAID") expensePaid += item.amount;
-      if (item.type === "INCOME" && item.status === "PENDING") pendingIncome += item.amount;
-      if (item.type === "INCOME" && item.status === "OVERDUE") overdueIncome += item.amount;
-    }
-    setCashFlow({
-      incomePaid,
-      expensePaid,
-      balance: incomePaid - expensePaid,
-      pendingIncome,
-      overdueIncome,
-      transactionCount: next.length,
-    });
-  };
-
   const openModal = () => {
+    setEditingId(null);
     form.reset({
       type: "INCOME",
       status: "PAID",
@@ -283,18 +369,49 @@ export function FinanceDashboard({
     setModalOpen(true);
   };
 
+  const openEditModal = (item: TransactionClientDTO) => {
+    if (item.type === "TRANSFER") {
+      toast.error("Transferências não podem ser editadas por aqui");
+      return;
+    }
+    setEditingId(item.id);
+    form.reset({
+      type: item.type,
+      status: item.status,
+      paymentMethod: item.paymentMethod ?? "PIX",
+      amount: String(item.amount).replace(".", ","),
+      description: item.description ?? "",
+      notes: item.notes ?? "",
+      date: toDateInputValue(item.date),
+      categoryId: item.categoryId ?? "",
+      customerId: item.customerId ?? "",
+    });
+    setModalOpen(true);
+  };
+
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      const result = await createTransactionAction(values);
-      if (!result.success) {
-        toast.error(result.error);
-        return;
+      if (editingId) {
+        const result = await updateTransactionAction({ id: editingId, ...values });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success(result.message ?? "Movimentação atualizada");
+        await refreshAfterMutation(
+          transactions.map((item) => (item.id === editingId ? result.data : item)),
+        );
+      } else {
+        const result = await createTransactionAction(values);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success(result.message ?? "Movimentação criada");
+        await refreshAfterMutation([result.data, ...transactions]);
       }
-      const next = [result.data, ...transactions];
-      setTransactions(next);
-      refreshLocalTotals(next);
-      toast.success(result.message ?? "Movimentação criada");
       setModalOpen(false);
+      setEditingId(null);
       router.refresh();
     });
   });
@@ -306,10 +423,8 @@ export function FinanceDashboard({
         toast.error(result.error);
         return;
       }
-      const next = transactions.filter((item) => item.id !== id);
-      setTransactions(next);
-      refreshLocalTotals(next);
       toast.success("Movimentação removida");
+      await refreshAfterMutation(transactions.filter((item) => item.id !== id));
       router.refresh();
     });
   };
@@ -353,6 +468,12 @@ export function FinanceDashboard({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild type="button" variant="outline" className="rounded-xl">
+            <Link href="/app/receivables">
+              <Handshake className="mr-2 size-4" />
+              Ver parcelas
+            </Link>
+          </Button>
           {canManage && (
             <Button
               type="button"
@@ -375,6 +496,14 @@ export function FinanceDashboard({
             </Button>
           )}
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <strong className="font-semibold text-slate-800">Dica:</strong> parcelas de vendas ficam em{" "}
+        <Link href="/app/receivables" className="font-semibold text-blue-700 underline underline-offset-2">
+          Parcelas
+        </Link>
+        . Aqui no Financeiro você lança entradas e saídas avulsas do caixa.
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -417,22 +546,56 @@ export function FinanceDashboard({
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-1.5">
-                {DATE_FILTERS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setFilter(item.id)}
-                    className={cn(
-                      "rounded-xl px-3.5 py-2 text-xs font-semibold transition",
-                      filter === item.id
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                        : "bg-slate-50 text-slate-600 hover:bg-slate-100",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {DATE_FILTERS.map((item) => {
+                  const label =
+                    item.id === "mes" && filter === "mes" && !viewingCurrentMonth
+                      ? formatMonthYear(viewMonth).split(" ")[0]
+                      : item.label;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => selectDateFilter(item.id)}
+                      className={cn(
+                        "rounded-xl px-3.5 py-2 text-xs font-semibold transition",
+                        filter === item.id
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                          : "bg-slate-50 text-slate-600 hover:bg-slate-100",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
+
+              {filter === "mes" ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-2 py-1.5 sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={goPrevMonth}
+                    className="grid size-9 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-slate-900"
+                    aria-label="Mês anterior"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  <p className="min-w-[140px] text-center text-sm font-semibold text-slate-800">
+                    {formatMonthYear(viewMonth)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={goNextMonth}
+                    disabled={!canGoNextMonth}
+                    className="grid size-9 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Próximo mês"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                  {listLoading ? (
+                    <span className="text-xs text-slate-400">Carregando…</span>
+                  ) : null}
+                </div>
+              ) : null}
 
               {filter === "personalizado" ? (
                 <div className="flex flex-wrap items-end gap-3">
@@ -576,15 +739,26 @@ export function FinanceDashboard({
                         </td>
                         {canManage && (
                           <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                              onClick={() => handleDelete(item.id)}
-                              disabled={pending}
-                              aria-label="Remover"
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
+                                onClick={() => openEditModal(item)}
+                                disabled={pending}
+                                aria-label="Editar"
+                              >
+                                <Pencil className="size-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                onClick={() => handleDelete(item.id)}
+                                disabled={pending}
+                                aria-label="Remover"
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -631,6 +805,10 @@ export function FinanceDashboard({
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="font-semibold tracking-[-0.02em]">Fluxo geral</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Resumo de tudo: o que já entrou, o que já saiu, o que ainda falta receber e o que
+              está atrasado.
+            </p>
             <div className="mt-4 grid gap-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500">Recebido</span>
@@ -655,12 +833,20 @@ export function FinanceDashboard({
         </aside>
       </div>
 
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) setEditingId(null);
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nova Movimentação</DialogTitle>
+            <DialogTitle>{editingId ? "Editar Movimentação" : "Nova Movimentação"}</DialogTitle>
             <DialogDescription>
-              Registre uma receita ou despesa com status e categoria.
+              {editingId
+                ? "Altere os dados e salve. O relatório e o caixa atualizam em seguida."
+                : "Registre uma receita ou despesa com status e categoria."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="grid gap-4">
@@ -737,7 +923,7 @@ export function FinanceDashboard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((method) => (
+                    {(PAYMENT_METHOD_OPTIONS).map((method) => (
                       <SelectItem key={method} value={method}>
                         {PAYMENT_METHOD_LABELS[method]}
                       </SelectItem>

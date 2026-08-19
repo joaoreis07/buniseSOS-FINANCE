@@ -1,8 +1,14 @@
 import type { FeatureKey } from "@prisma/client";
 import type { LucideIcon } from "lucide-react";
 import {
+  CalendarDays,
+  FileBarChart2,
+  Handshake,
   LayoutDashboard,
   Settings,
+  ShoppingBag,
+  Sparkles,
+  Target,
   Users,
   Wallet,
 } from "lucide-react";
@@ -26,11 +32,55 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     permission: "dashboard:view",
   },
   {
+    href: "/app/insights",
+    label: "Saúde do caixa",
+    title: "Saúde do seu caixa",
+    icon: Sparkles,
+    permission: "finance:view",
+  },
+  {
     href: "/app/finance",
     label: "Financeiro",
     title: "Financeiro",
     icon: Wallet,
     permission: "finance:view",
+  },
+  {
+    href: "/app/sales",
+    label: "Vendas",
+    title: "Vendas",
+    icon: ShoppingBag,
+    permission: "sales:view",
+  },
+  {
+    href: "/app/calendar",
+    label: "Agenda",
+    title: "Agenda do dinheiro",
+    icon: CalendarDays,
+    permission: "finance:view",
+  },
+  {
+    href: "/app/receivables",
+    label: "Parcelas",
+    title: "Parcelas a receber",
+    icon: Handshake,
+    permission: "finance:view",
+  },
+  {
+    href: "/app/reports",
+    label: "Meta",
+    title: "Meta e acompanhamento",
+    icon: Target,
+    permission: "reports:view",
+    feature: "reports",
+  },
+  {
+    href: "/app/relatorios",
+    label: "Relatórios",
+    title: "Relatórios profissionais",
+    icon: FileBarChart2,
+    permission: "reports:view",
+    feature: "reports",
   },
   {
     href: "/app/customers",

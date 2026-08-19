@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +12,6 @@ import { registerSchema, type RegisterInput } from "../schemas/auth.schemas";
 import { AuthShell } from "./login-form";
 
 export function RegisterForm() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -31,24 +29,21 @@ export function RegisterForm() {
     setError(null);
     startTransition(async () => {
       const result = await registerAction(values);
-      if (!result.success) {
+      if (result && !result.success) {
         setError(result.error);
-        return;
       }
-      router.push("/app");
-      router.refresh();
     });
   });
 
   return (
     <AuthShell
-      title="Criar sua conta"
-      subtitle="Comece grátis. Configure sua empresa em minutos."
+      title="Criar sua conta grátis"
+      subtitle="Preencha os dados abaixo. Leva só alguns minutos."
       footer={
         <>
           Já tem conta?{" "}
           <Link href="/login" className="font-semibold text-blue-600">
-            Entrar
+            Entrar no painel
           </Link>
         </>
       }

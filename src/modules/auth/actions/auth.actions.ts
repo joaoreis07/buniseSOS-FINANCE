@@ -153,6 +153,20 @@ export async function exitDemoToRegisterAction(): Promise<ActionResult> {
   }
 }
 
+/** Leaves the demo session and returns to the public landing page. */
+export async function exitDemoToHomeAction(): Promise<ActionResult> {
+  try {
+    await signOut({ redirectTo: "/" });
+    return { success: true };
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Não foi possível sair da demonstração",
+    };
+  }
+}
+
 export async function forgotPasswordAction(input: unknown): Promise<ActionResult> {
   try {
     const ip = await clientIp();

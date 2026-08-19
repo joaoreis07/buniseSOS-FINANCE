@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { FileBarChart2 } from "lucide-react";
-import { ComingSoonPage } from "@/shared/components/coming-soon-page";
+import { MonthlyReportView } from "@/modules/reports/components/monthly-report-view";
+import { getMonthlyReportData } from "@/modules/reports/services/reports.service";
+import { hasPermission } from "@/shared/lib/rbac";
 import { requirePermission } from "@/shared/lib/session";
 import { isFeatureEnabled } from "@/shared/services/feature-flags.service";
 
@@ -11,11 +12,12 @@ export default async function ReportsPage() {
     redirect("/app");
   }
 
+  const report = await getMonthlyReportData(user.companyId);
+
   return (
-    <ComingSoonPage
-      title="Relatórios"
-      description="Indicadores avançados e exportações."
-      icon={FileBarChart2}
+    <MonthlyReportView
+      initialData={report}
+      canEditGoal={hasPermission(user.role, "settings:manage")}
     />
   );
 }

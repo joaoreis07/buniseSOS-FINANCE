@@ -69,4 +69,19 @@ export type DashboardResponseDTO = {
   revenueByCategory: DashboardCategoryBreakdown[];
   expensesByCategory: DashboardCategoryBreakdown[];
   appointmentsCount: number | null;
+
+  crm: {
+    customersCount: number;
+    overdueCustomers: number;
+    totalReceivable: number;
+    formattedTotalReceivable: string;
+    receivedMonth: number;
+    formattedReceivedMonth: string;
+    pendingInstallments: number;
+    paidInstallments: number;
+    overdueInstallments: number;
+    topCustomerName: string | null;
+    topCustomerAmount: number;
+    formattedTopCustomerAmount: string;
+  };
 };

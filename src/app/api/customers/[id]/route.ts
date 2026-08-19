@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { auth } from "@/shared/lib/auth";
-import { hasPermission } from "@/shared/lib/rbac";
+import { resolveApiPermission } from "@/shared/lib/api-session";
 import { updateCustomerSchema } from "@/modules/customers/schemas/customer.schemas";
 import {
   deleteCustomer,
@@ -12,16 +11,14 @@ import {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("customers:view");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "customers:view")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   const { id } = await context.params;
-  const detail = await getCustomerDetail(session.user.companyId, id);
+  const detail = await getCustomerDetail(user.companyId, id);
   if (!detail) {
     return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
   }
@@ -29,21 +26,19 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("customers:manage");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "customers:manage")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   try {
     const { id } = await context.params;
     const body = await request.json();
     const data = updateCustomerSchema.parse(body);
     const updated = await updateCustomer({
-      companyId: session.user.companyId,
-      userId: session.user.id,
+      companyId: user.companyId,
+      userId: user.id,
       id,
       data,
       ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
@@ -67,19 +62,17 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.companyId || !session.user.role || !session.user.id) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+  const authResult = await resolveApiPermission("customers:manage");
+  if (!authResult.ok) {
+    return authResult.response;
   }
-  if (!hasPermission(session.user.role, "customers:manage")) {
-    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
-  }
+  const { user } = authResult;
 
   try {
     const { id } = await context.params;
     await deleteCustomer({
-      companyId: session.user.companyId,
-      userId: session.user.id,
+      companyId: user.companyId,
+      userId: user.id,
       id,
       ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
       userAgent: request.headers.get("user-agent"),

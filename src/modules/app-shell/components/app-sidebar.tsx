@@ -8,6 +8,7 @@ import { Menu, X } from "lucide-react";
 import { Brand } from "@/shared/components/brand";
 import { hasPermission } from "@/shared/lib/rbac";
 import { APP_NAV_ITEMS } from "../nav";
+import { ExitDemoButton } from "./exit-demo-button";
 
 function NavLinks({
   role,
@@ -55,13 +56,24 @@ function NavLinks({
 export function AppSidebar({
   role,
   flags,
+  isDemo = false,
 }: {
   role: Role;
   flags: Record<FeatureKey, boolean>;
+  isDemo?: boolean;
 }) {
   return (
     <aside className="fixed inset-y-0 hidden w-64 border-r border-slate-800 bg-slate-950 px-4 py-6 text-slate-400 lg:block">
-      <Brand light />
+      <Brand light size={44} />
+      {isDemo ? (
+        <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5">
+          <p className="text-[11px] font-semibold text-amber-200">Modo demonstração</p>
+          <p className="mt-1 text-[11px] leading-4 text-slate-400">
+            Você está explorando com dados de exemplo.
+          </p>
+          <ExitDemoButton variant="dark" className="mt-2.5 w-full justify-center" />
+        </div>
+      ) : null}
       <p className="mt-10 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
         Menu principal
       </p>
@@ -79,9 +91,11 @@ export function AppSidebar({
 export function MobileNav({
   role,
   flags,
+  isDemo = false,
 }: {
   role: Role;
   flags: Record<FeatureKey, boolean>;
+  isDemo?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -106,7 +120,7 @@ export function MobileNav({
           />
           <aside className="absolute inset-y-0 left-0 flex w-[280px] flex-col bg-slate-950 px-4 py-6 text-slate-400 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <Brand light />
+              <Brand light size={44} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -116,6 +130,12 @@ export function MobileNav({
                 <X className="size-4" />
               </button>
             </div>
+            {isDemo ? (
+              <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-amber-200">Modo demonstração</p>
+                <ExitDemoButton variant="dark" className="mt-2.5 w-full justify-center" />
+              </div>
+            ) : null}
             <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600">
               Menu principal
             </p>

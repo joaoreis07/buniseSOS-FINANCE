@@ -104,7 +104,7 @@ export const updateTransactionWithIdSchema = z
       id: string;
       type?: "INCOME" | "EXPENSE";
       status?: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-      paymentMethod?: "PIX" | "CASH" | "CARD" | "TED" | "BOLETO" | null;
+      paymentMethod?: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER" | null;
       amount?: number;
       description?: string;
       notes?: string | null;
@@ -129,13 +129,29 @@ export const categoryIdSchema = z.object({
   id: z.string().min(1, "Categoria inválida"),
 });
 
-export const financeListQuerySchema = z.object({
-  search: z.string().trim().optional(),
-  type: transactionTypeSchema.optional(),
-  status: transactionStatusSchema.optional(),
-  page: z.coerce.number().int().min(1).optional().default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).optional().default(50),
-});
+export const financeListQuerySchema = z
+  .object({
+    search: z.string().trim().optional(),
+    type: transactionTypeSchema.optional(),
+    status: transactionStatusSchema.optional(),
+    page: z.coerce.number().int().min(1).optional().default(1),
+    pageSize: z.coerce.number().int().min(1).max(500).optional().default(50),
+    dateFrom: z.string().trim().optional(),
+    dateTo: z.string().trim().optional(),
+  })
+  .transform((data) => ({
+    search: data.search,
+    type: data.type,
+    status: data.status,
+    page: data.page,
+    pageSize: data.pageSize,
+    dateFrom: data.dateFrom
+      ? new Date(`${data.dateFrom.slice(0, 10)}T00:00:00`)
+      : undefined,
+    dateTo: data.dateTo
+      ? new Date(`${data.dateTo.slice(0, 10)}T23:59:59.999`)
+      : undefined,
+  }));
 
 export type TransactionFormInput = z.infer<typeof transactionFormSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;

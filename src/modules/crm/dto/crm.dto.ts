@@ -3,11 +3,21 @@ import { diffCivilDays, dueCivilDateKey, todayCivilDateKey } from "../lib/civil-
 
 export type FinancialCustomerStatus = "UP_TO_DATE" | "HAS_PENDING" | "OVERDUE";
 
+export type CreateSaleItemInput = {
+  description: string;
+  quantity: number | string;
+  unitPrice: number | string;
+  discountAmount?: number | string;
+  sortOrder?: number;
+};
+
 export type CreateSaleInput = {
   customerId: string;
   description: string;
   categoryId?: string | null;
   totalAmount: number;
+  discountAmount?: number | string;
+  items?: CreateSaleItemInput[] | null;
   paymentMethod: "PIX" | "CASH" | "CARD" | "CARD_CREDIT" | "CARD_DEBIT" | "TED" | "BOLETO" | "OTHER";
   paymentMode: "CASH" | "INSTALLMENT";
   cashStatus?: "PAID" | "PENDING";
@@ -58,6 +68,119 @@ export type SaleDTO = {
   installmentsCount: number;
   soldAt: string;
   notes: string | null;
+};
+
+export type SaleListStatus = "PAID" | "PENDING" | "PARTIAL" | "OVERDUE" | "CANCELED";
+
+export const SALE_LIST_STATUS_LABELS: Record<SaleListStatus, string> = {
+  PAID: "Pago",
+  PENDING: "Pendente",
+  PARTIAL: "Parcial",
+  OVERDUE: "Atrasado",
+  CANCELED: "Cancelado",
+};
+
+export type SaleListPeriod = "hoje" | "ontem" | "semana" | "mes" | "todos" | "personalizado";
+
+export type ListSalesInput = {
+  search?: string;
+  period?: SaleListPeriod;
+  customFrom?: string;
+  customTo?: string;
+  status?: "ALL" | SaleListStatus;
+  paymentMethod?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type SaleListItemDTO = {
+  id: string;
+  code: string;
+  soldAt: string;
+  customerId: string | null;
+  customerName: string;
+  description: string;
+  totalAmount: number;
+  formattedTotalAmount: string;
+  paymentMethod: string;
+  paymentMode: "CASH" | "INSTALLMENT";
+  paymentConditionLabel: string;
+  installmentsCount: number;
+  itemCount: number;
+  status: SaleListStatus;
+  statusLabel: string;
+};
+
+export type SaleListIndicatorsDTO = {
+  salesCount: number;
+  totalSold: number;
+  averageTicket: number;
+  formattedTotalSold: string;
+  formattedAverageTicket: string;
+  periodLabel: string;
+};
+
+export type SaleListResultDTO = {
+  items: SaleListItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+  indicators: SaleListIndicatorsDTO;
+};
+
+export type SaleDetailCustomerDTO = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  document: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  notes: string | null;
+  status: "ACTIVE" | "INACTIVE" | "BLOCKED";
+};
+
+export type SaleDetailItemDTO = {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  lineTotal: number;
+  sortOrder: number;
+};
+
+export type SaleDetailFinancialDTO = {
+  subtotal: number;
+  itemDiscountTotal: number;
+  generalDiscount: number;
+  total: number;
+};
+
+export type SaleDetailDTO = {
+  sale: {
+    id: string;
+    code: string;
+    soldAt: string;
+    status: SaleListStatus;
+    statusLabel: string;
+    description: string;
+    categoryId: string | null;
+    totalAmount: number;
+    discountAmount: number;
+    paymentMethod: string;
+    paymentMode: "CASH" | "INSTALLMENT";
+    installmentsCount: number;
+    notes: string | null;
+    paymentConditionLabel: string;
+  };
+  customer: SaleDetailCustomerDTO;
+  items: SaleDetailItemDTO[];
+  financial: SaleDetailFinancialDTO;
+  installments: InstallmentDTO[];
+  payments: InstallmentPaymentHistoryDTO[];
 };
 
 export type InstallmentDTO = {
@@ -200,6 +323,47 @@ export function computeFinancialStatus(input: {
   if (input.overdue > 0) return "OVERDUE";
   if (input.pending > 0) return "HAS_PENDING";
   return "UP_TO_DATE";
+}
+
+export function computeSaleStatus(input: {
+  deletedAt: Date | string | null;
+  installments: Array<{
+    status: "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
+    amount: unknown;
+    dueDate: Date | string;
+    payments?: Array<{ amount: unknown }> | null;
+  }>;
+}): SaleListStatus {
+  if (input.deletedAt) return "CANCELED";
+
+  const open = input.installments.filter((item) => item.status !== "CANCELED");
+  if (open.length === 0) return "PAID";
+
+  const todayKey = todayCivilDateKey();
+  let hasOverdue = false;
+  let hasPartial = false;
+  let hasOpen = false;
+
+  for (const item of open) {
+    const amount = Math.round((Number(item.amount) + Number.EPSILON) * 100) / 100;
+    const paidFromRows = (item.payments ?? []).reduce(
+      (acc, payment) => acc + Number(payment.amount),
+      0,
+    );
+    const paidRounded = Math.round((paidFromRows + Number.EPSILON) * 100) / 100;
+    const effectivePaid = paidRounded > 0 ? paidRounded : item.status === "PAID" ? amount : 0;
+    const remaining = Math.max(0, Math.round((amount - effectivePaid + Number.EPSILON) * 100) / 100);
+    if (remaining <= 0) continue;
+    hasOpen = true;
+    if (effectivePaid > 0) hasPartial = true;
+    const dueKey = dueCivilDateKey(item.dueDate);
+    if (dueKey < todayKey) hasOverdue = true;
+  }
+
+  if (!hasOpen) return "PAID";
+  if (hasOverdue) return "OVERDUE";
+  if (hasPartial) return "PARTIAL";
+  return "PENDING";
 }
 
 function isFullyPaid(item: InstallmentDTO): boolean {

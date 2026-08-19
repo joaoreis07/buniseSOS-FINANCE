@@ -437,6 +437,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
         userId: data.userId ?? null,
         title: data.title,
         message: data.message,
+        category: data.category ?? "SYSTEM",
       },
     });
     return {
@@ -444,6 +445,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
       companyId: notification.companyId,
       userId: notification.userId,
       title: notification.title,
+      category: notification.category,
       message: notification.message,
       read: notification.read,
       createdAt: notification.createdAt,
@@ -466,6 +468,7 @@ export class PrismaNotificationRepository implements INotificationRepository {
       userId: notification.userId,
       title: notification.title,
       message: notification.message,
+      category: notification.category,
       read: notification.read,
       createdAt: notification.createdAt,
     }));

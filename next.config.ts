@@ -4,13 +4,18 @@ import { fileURLToPath } from "url";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+const isDev = process.env.NODE_ENV === "development";
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  // Next.js dev uses eval-source-map; without this, client components never hydrate.
+  isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self'",
+  isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
