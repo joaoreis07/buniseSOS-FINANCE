@@ -5,7 +5,8 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && node ./scripts/migrate-deploy.mjs && next build",
+    "build": "prisma generate && node ./scripts/migrate-deploy.mjs && tsx scripts/ensure-demo-account.ts && next build",
+    "demo:ensure": "tsx scripts/ensure-demo-account.ts",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
